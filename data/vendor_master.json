@@ -1,0 +1,8 @@
+[
+ {"vendor":"Brightwell Consulting","category":"Professional Services","usage_based":false},
+ {"vendor":"CloudNimbus","category":"Cloud Hosting","usage_based":true},
+ {"vendor":"OfficeCo Supplies","category":"Office Supplies","usage_based":false},
+ {"vendor":"SwiftFreight Logistics","category":"Freight","usage_based":false},
+ {"vendor":"Pioneer Property Mgmt","category":"Rent and Facilities","usage_based":false},
+ {"vendor":"DataPulse Software","category":"Software Subscriptions","usage_based":false}
+]

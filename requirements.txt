@@ -1,0 +1,13 @@
+langgraph>=0.2
+langchain-core
+langchain-aws
+langchain-anthropic
+scikit-learn
+numpy
+pandas
+fastapi
+uvicorn
+pinecone
+sqlalchemy
+python-dotenv
+requests

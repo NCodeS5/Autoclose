@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AutoClose</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1d1d1b;--mut:#6b6a64;--line:#e4e2da;--ok:#1f7a4d;--okbg:#e6f4ec;--warn:#9a5b00;--warnbg:#fdf0d9;--bad:#a12d2d;--badbg:#fbe6e6;--acc:#2b4fa3}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#201f1d;--ink:#eeede8;--mut:#a09f97;--line:#34332f;--ok:#6fd0a0;--okbg:#18352a;--warn:#f0b95a;--warnbg:#3a2c12;--bad:#f09a9a;--badbg:#3b1b1b;--acc:#8fb0f2}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1040px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:22px;margin:0}h2{font-size:15px;margin:0 0 12px;font-weight:600}
+.sub{color:var(--mut);margin:4px 0 20px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.tile b{display:block;font-size:24px;font-weight:600}.tile span{color:var(--mut);font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.scen{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.scen button{text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;color:var(--ink);font:inherit}
+.scen button:hover{border-color:var(--acc)}.scen button b{display:block;font-size:14px}.scen button span{color:var(--mut);font-size:12px}
+.pill{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600}
+.p-ok{background:var(--okbg);color:var(--ok)}.p-warn{background:var(--warnbg);color:var(--warn)}.p-bad{background:var(--badbg);color:var(--bad)}
+.case{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.case pre{white-space:pre-wrap;background:var(--bg);border-radius:8px;padding:10px;font:12.5px/1.5 ui-monospace,Consolas,monospace;margin:8px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input[type=text]{flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+.btn{border:0;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer;color:#fff}
+.go{background:var(--ok)}.stop{background:var(--bad)}
+.go,.stop{color:#fff}
+table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut);font-weight:500;font-size:12px}
+.empty{color:var(--mut);padding:6px 0}.hint{color:var(--mut);font-size:12.5px;margin:0 0 10px}
+</style></head><body><div class="wrap">
+<h1>AutoClose</h1>
+<p class="sub">Agents run the month-end close and stop to ask a person only for edge cases. All data is synthetic.</p>
+<div class="tiles" id="tiles"></div>
+
+<div class="card"><h2>1. Start a close</h2>
+<p class="hint">Each button generates a fake month with one specific situation, then runs the agents on it.</p>
+<div class="scen" id="scen"></div></div>
+
+<div class="card"><h2>2. Needs your review <span id="qcount" class="pill p-warn">0</span></h2>
+<div id="queue"></div></div>
+
+<div class="card"><h2>3. Recent closes</h2><div id="hist"></div></div>
+</div>
+<script>
+const SC=[["clean","Everything matches","Finishes on its own"],["duplicate","Duplicate invoice","Agent fixes it itself"],["misclassified","Wrong category","Agent fixes it itself"],["writeoff","Write-off entry","Policy case: asks a person"],["missing_bank","No bank record","Unexplained: asks a person"],["novel_vendor","Unknown vendor","New to the system: asks a person"]];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+async function api(path,body){
+  const r=await fetch(path,body?{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}:{});
+  if(!r.ok){let d;try{d=(await r.json()).detail}catch(e){}throw new Error(d||("Request failed: "+r.status))}
+  return r.json();
+}
+function pill(c,t){return '<span class="pill p-'+c+'">'+esc(t)+'</span>'}
+function edge(reason){const m=(reason||"").match(/^(E\d)/);return m?m[1]:""}
+async function refresh(){
+  const [m,q,h]=await Promise.all([api("/metrics"),api("/queue"),api("/history")]);
+  const t=[["Closes run",m.closes],["Finished alone",m.auto],["Asked a person",m.escalated+m.audit],["Decisions made",m.decisions],["Waiting now",m.pending],["Avg time (ms)",m.avg_latency_ms]];
+  $("tiles").innerHTML=t.map(x=>'<div class="tile"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join("");
+  $("qcount").textContent=q.length;
+  $("queue").innerHTML=q.length?q.map(c=>
+    '<div class="case"><div class="row">'+pill("warn",edge(c.reasons[0])||c.route)+' <b>'+esc(c.reasons[0])+'</b> <span style="color:var(--mut)">'+esc(c.thread_id)+'</span></div>'+
+    '<pre>'+esc(c.report)+'</pre>'+
+    (c.actions.length?'<div class="hint">Agent proposed: '+c.actions.map(a=>esc(a.action+" "+a.entry_id)).join(", ")+'</div>':'')+
+    '<div class="row"><input type="text" id="n-'+c.thread_id+'" placeholder="Optional note">'+
+    '<button class="btn go" onclick="decide(\''+c.thread_id+'\',\'benign\')">Approve: looks fine</button>'+
+    '<button class="btn stop" onclick="decide(\''+c.thread_id+'\',\'issue\')">Reject: real issue</button></div></div>').join(""):
+    '<div class="empty">Nothing waiting. Start a close above, such as the write-off.</div>';
+  $("hist").innerHTML=h.length?'<table><tr><th>Case</th><th>Scenario</th><th>Outcome</th><th>Why</th><th>Agent fixes</th><th>ms</th></tr>'+h.map(x=>{
+    let o=x.status==="needs_review"?pill("warn","Waiting for person"):x.decision?(x.final==="held"?pill("bad","Held by person"):pill("ok","Approved by person")):pill("ok","Finished alone");
+    return '<tr><td>'+esc(x.thread_id)+'</td><td>'+esc(x.scenario)+'</td><td>'+o+'</td><td>'+esc(x.reason)+'</td><td>'+x.actions+'</td><td>'+x.latency_ms+'</td></tr>'}).join("")+'</table>':
+    '<div class="empty">No closes yet.</div>';
+}
+async function start(s){try{await api("/closes",{scenario:s});await refresh()}catch(e){alert(e.message)}}
+async function decide(id,r){try{await api("/cases/"+id+"/decision",{resolution:r,note:($("n-"+id)||{}).value||""});await refresh()}catch(e){alert(e.message)}}
+$("scen").innerHTML=SC.map(x=>'<button onclick="start(\''+x[0]+'\')"><b>'+x[1]+'</b><span>'+x[2]+'</span></button>').join("");
+refresh();
+</script></body></html>

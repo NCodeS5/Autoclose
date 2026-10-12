@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AutoClose Invoice Review</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1d1d1b;--mut:#6b6a64;--line:#e4e2da;--ok:#1f7a4d;--okbg:#e6f4ec;--warn:#9a5b00;--warnbg:#fdf0d9;--bad:#a12d2d;--badbg:#fbe6e6;--acc:#2b4fa3;--accbg:#e8eefb}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#201f1d;--ink:#eeede8;--mut:#a09f97;--line:#34332f;--ok:#6fd0a0;--okbg:#18352a;--warn:#f0b95a;--warnbg:#3a2c12;--bad:#f09a9a;--badbg:#3b1b1b;--acc:#8fb0f2;--accbg:#1c2740}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:22px;margin:0}h2{font-size:15px;margin:0 0 4px;font-weight:600}
+.sub{color:var(--mut);margin:4px 0 14px}.hint{color:var(--mut);font-size:12.5px;margin:0 0 10px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:14px 0 18px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}.tile b{display:block;font-size:24px;font-weight:600}.tile span{color:var(--mut);font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.pill{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+.p-ok{background:var(--okbg);color:var(--ok)}.p-warn{background:var(--warnbg);color:var(--warn)}.p-bad{background:var(--badbg);color:var(--bad)}.p-acc{background:var(--accbg);color:var(--acc)}.p-mut{background:var(--bg);color:var(--mut);border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut);font-weight:500;font-size:12px}
+tr.click{cursor:pointer}tr.click:hover td{background:var(--bg)}
+.btn{border:0;border-radius:8px;padding:7px 13px;font:inherit;font-weight:600;cursor:pointer;color:#fff;background:var(--acc)}.btn.sm{padding:3px 10px;font-size:12.5px}
+.btn.ghost{background:var(--bg);color:var(--ink);border:1px solid var(--line)}.go{background:var(--ok)}.stop{background:var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row.sp{justify-content:space-between}
+.case{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+.box{background:var(--bg);border-radius:8px;padding:10px;font-size:13px}.box h3{margin:0 0 6px;font-size:12px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.pas{padding:6px 0;border-bottom:1px solid var(--line)}.pas:last-child{border:0}.pas.cited{background:var(--accbg);margin:0 -6px;padding:6px}
+.id{font-family:ui-monospace,Consolas,monospace;font-weight:600;color:var(--acc)}
+input[type=text]{flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+.scroll{max-height:340px;overflow:auto}.box .scroll{overflow-x:hidden;overflow-wrap:anywhere}.empty{color:var(--mut);padding:6px 0}.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+</style></head><body><div class="wrap">
+<h1>AutoClose · Invoice Review</h1>
+<p class="sub">An agent checks each invoice against company policy and the vendor contract, cites the clauses it used, and stops to ask a person only for edge cases. All data is invented.</p>
+<div class="row" id="status"></div>
+<div class="tiles" id="tiles"></div>
+
+<div class="card"><div class="row sp"><div><h2>1. Invoices</h2><p class="hint" style="margin:0">Run one to watch the agent work, or run all 28.</p></div>
+<div class="row"><button class="btn" onclick="runAll()">Run all</button><button class="btn ghost" onclick="resetAll()">Reset</button></div></div>
+<div class="scroll" style="margin-top:10px"><table id="cases"></table></div></div>
+
+<div class="card"><h2>2. Needs your review <span id="qcount" class="pill p-warn">0</span></h2>
+<p class="hint">The agent paused here. Blue-highlighted passages are the ones it cited.</p><div id="queue"></div></div>
+
+<div class="card"><h2>3. Results</h2><p class="hint">Click a row to see the evidence and the audit trail.</p><div class="scroll" style="max-height:520px"><table id="hist"></table></div><div id="detail"></div></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const money=n=>(n<0?"-":"")+"$"+Math.abs(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+async function api(path,body){const r=await fetch(path,body!==undefined?{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}:{});
+  if(!r.ok){let d;try{d=(await r.json()).detail}catch(e){}throw new Error(d||("Request failed: "+r.status))}return r.json()}
+const pill=(c,t)=>'<span class="pill p-'+c+'">'+esc(t)+'</span>';
+const EDGE={E1:"E1 policy",E2:"E2 unexplained",E3:"E3 novel"};
+function outcome(h){
+  if(h.status==="running")return pill("acc","Running…");
+  if(h.status==="rechecking")return pill("acc","Re-checking…");
+  if(h.status==="finishing")return pill("acc","Finishing…");
+  if(h.status==="failed")return pill("bad","Failed");
+  if(h.status==="needs_review")return pill("warn","Waiting for a person");
+  const f=h.final, by=h.linked_to?" · auto-resolved from "+h.linked_to:h.reviewer?(h.reviewer==="issue"?" · person rejected":" · person approved"):" · by agent";
+  const c=f==="held"?"bad":"ok", t={approved:"Approved",voided:"Void proposed",recoded:"Recode proposed",held:"Held"}[f]||f;
+  return pill(c,t)+'<span class="hint"> '+esc(by)+'</span>';}
+const steps=h=>{const t=h.trace||[];if(!t.length)return"";
+  return '<div class="box" style="margin-top:12px"><h3>Agent steps (chosen by the model)</h3>'+t.map(x=>'<div class="pas"><b>'+x.step+'. '+esc(x.tool)+'</b> <span class="mono">'+esc(x.args&&x.args.query?x.args.query:(x.args&&x.args.decision?x.args.decision+" · edge "+x.args.edge+" · conf "+x.args.confidence:""))+'</span>'+(x.found?' <span class="hint">→ '+esc(x.found.join(", ")||"nothing")+'</span>':"")+'</div>').join("")+'</div>';};
+const cites=(h)=>(h.citations||[]).map(c=>'<span class="id">'+esc(c)+'</span>').join(", ")||"—";
+let CASES=[];
+let timer=null;
+async function refresh(){
+  const [m,q,h,cs]=await Promise.all([api("/review/metrics"),api("/review/queue"),api("/review/history"),api("/review/cases")]);
+  CASES=cs;
+  const busy=m.running>0; document.querySelectorAll("button").forEach(b=>{if(b.dataset.keep!=="1")b.disabled=false});
+  clearTimeout(timer); if(busy)timer=setTimeout(()=>refresh().catch(()=>{}),800);
+  $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
+  const t=[["Invoices run",m.runs+(m.running?" ("+m.running+" running)":"")],["Handled by agent",m.auto],["Reviewed by person",m.reviewed],["Waiting now",m.waiting],["Guard stepped in",m.guard_overrides],["Learned from reviews",m.learned]];
+  $("tiles").innerHTML=t.map(x=>'<div class="tile"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join("");
+  const ran=new Set(h.map(x=>x.case_id.replace(/-r\d+$/,"")));
+  $("cases").innerHTML='<tr><th>ID</th><th>Vendor</th><th>Description</th><th>Amount</th><th></th></tr>'+cs.map(c=>
+    '<tr><td>'+c.id+'</td><td>'+esc(c.vendor)+'</td><td>'+esc(c.description)+'</td><td>'+money(c.amount)+'</td><td><button class="btn sm '+(ran.has(c.id)?'ghost':'')+'" onclick="runOne(\''+c.id+'\')">'+(ran.has(c.id)?'Run again':'Run')+'</button></td></tr>').join("");
+  $("qcount").textContent=q.length;
+  $("queue").innerHTML=q.length?q.map(card).join(""):'<div class="empty">Nothing waiting. Run an invoice above, for example C16 (credit memo) or C19 (unknown vendor).</div>';
+  $("hist").innerHTML=h.length?'<tr><th>Case</th><th>Vendor</th><th>Amount</th><th>Agent decision</th><th>Edge case</th><th>Outcome</th><th>Cited</th></tr>'+h.map(x=>
+    '<tr class="click" onclick="detail(\''+x.case_id+'\')"><td>'+x.case_id+'</td><td>'+esc(x.vendor)+'</td><td>'+money(x.amount)+'</td><td>'+esc(x.proposed||x.decision)+(x.guard_notes&&x.guard_notes.length?' '+pill("bad","guard"):'')+'</td><td>'+(x.edge?pill("warn",EDGE[x.edge]||x.edge):"")+'</td><td>'+outcome(x)+'</td><td>'+cites(x)+'</td></tr>').join(""):'<tr><td class="empty">No results yet.</td></tr>';
+}
+function evidence(h){
+  const cited=new Set(h.citations||[]);
+  const ps=(h.passages||[]).concat((h.similar_cases||[]).map(c=>({id:c.id,text:c.text+" ("+c.outcome+")"})));
+  ps.sort((a,b)=>(cited.has(b.id)?1:0)-(cited.has(a.id)?1:0));
+  return ps.map(p=>'<div class="pas '+(cited.has(p.id)?'cited':'')+'"><span class="id">'+esc(p.id)+'</span> '+esc(p.text)+'</div>').join("")||'<div class="empty">Nothing retrieved.</div>';}
+function facts(h){const i=h.invoice,c=h.checks||{};
+  return '<div><b>'+esc(i.vendor)+'</b> · '+esc(i.invoice_no)+' · '+money(i.amount)+(i.po_amount!=null?' vs PO '+money(i.po_amount):' (no PO)')+'</div><div class="hint">'+esc(i.description)+'</div>'+
+  '<div class="row" style="margin-top:4px">'+(c.variance_pct!=null?pill("mut","variance "+c.variance_pct+"%"):"")+(c.duplicate_of?pill("bad","duplicate of "+c.duplicate_of):"")+(!c.known_vendor?pill("bad","unknown vendor"):"")+(c.category_mismatch?pill("warn","category mismatch"):"")+(c.late_fee?pill("warn","late fee"):"")+(c.ytd_billed!=null?pill("mut","billed this year "+money(c.ytd_billed)):"")+'</div>';}
+function card(h){
+  const g=(h.guard_notes||[]).map(n=>'<div class="hint" style="color:var(--bad)">Guard: '+esc(n)+'</div>').join("");
+  return '<div class="case"><div class="row">'+pill("warn",EDGE[h.edge]||"Audit sample")+' <b>'+h.case_id+'</b></div><div style="margin:8px 0">'+facts(h)+'</div>'+
+  '<div class="grid2"><div class="box"><h3>Agent says</h3><div>'+esc(h.rationale||"No rationale. The guard stopped this.")+'</div><div class="hint" style="margin-top:6px">Confidence '+(h.confidence!=null?h.confidence:"–")+' · Cites '+cites(h)+'</div>'+g+'</div>'+
+  '<div class="box"><h3>Evidence retrieved</h3><div class="scroll" style="max-height:200px">'+evidence(h)+'</div></div></div>'+
+  '<div class="row" style="margin-top:10px"><input type="text" id="n-'+h.case_id+'" placeholder="Optional note">'+
+  '<button class="btn go" onclick="decide(\''+h.case_id+'\',\'benign\')">Approve</button><button class="btn stop" onclick="decide(\''+h.case_id+'\',\'issue\')">Reject</button></div></div>';}
+async function detail(id){
+  const [h,a]=await Promise.all([api("/review/history"),api("/review/audit/"+id)]);
+  const x=h.find(r=>r.case_id===id); if(!x)return;
+  $("detail").innerHTML='<div class="case" style="margin-top:12px"><div class="row sp"><b>'+id+'</b><button class="btn sm ghost" onclick="$(\'detail\').innerHTML=\'\'">Close</button></div><div style="margin:8px 0">'+facts(x)+'</div>'+
+   '<div class="grid2"><div class="box"><h3>Decision</h3><div>'+esc(x.rationale||"")+'</div><div class="hint">Confidence '+(x.confidence!=null?x.confidence:"–")+' · Model: '+esc(x.provider)+'</div>'+'</div><div class="box"><h3>Evidence</h3><div class="scroll" style="max-height:200px">'+evidence(x)+'</div></div></div>'+
+   steps(x)+'<div class="box" style="margin-top:12px"><h3>Audit trail</h3>'+a.map(e=>'<div class="pas"><b>'+esc(e.step)+'</b> <span class="mono">'+esc(JSON.stringify(e.detail).slice(0,220))+'</span></div>').join("")+'</div></div>';
+  $("detail").scrollIntoView({behavior:"smooth"});}
+async function runOne(id){try{await api("/review/run?wait=false",{case_id:id});await refresh()}catch(e){alert(e.message)}}
+async function runAll(){try{await api("/review/run-all?wait=false",{});await refresh()}catch(e){alert(e.message)}}
+async function resetAll(){await api("/review/reset",{});$("detail").innerHTML="";await refresh()}
+async function decide(id,r){try{await api("/review/decision/"+id+"?wait=false",{resolution:r,note:($("n-"+id)||{}).value||""});await refresh()}catch(e){alert(e.message)}}
+refresh();
+</script></body></html>

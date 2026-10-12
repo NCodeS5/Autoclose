@@ -1,0 +1,35 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt pytest httpx
+      - run: python -m pytest -q
+      - name: Metric gate, month-end close (stub LLM)
+        run: python run_eval.py 300 --min-recall 0.95 --max-auto-error 0.01
+      - name: Metric gate, invoice review (local vector store, offline reasoner)
+        run: python run_rag_eval.py --min-accuracy 0.95 --min-recall 1.0 --max-auto-error 0 --min-retrieval 0.95
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t autoclose:${{ github.sha }} .
+      - name: Smoke test container
+        run: |
+          docker run -d --name ac -p 8000:8000 autoclose:${{ github.sha }}
+          for i in $(seq 1 20); do curl -sf localhost:8000/health && break || sleep 2; done
+          curl -sf -X POST localhost:8000/review/run -H 'content-type: application/json' -d '{"case_id":"C01"}'
+          curl -sf -X POST localhost:8000/closes -H 'content-type: application/json' -d '{"scenario":"clean"}'
+      # To publish to ECR, add AWS credentials as repository secrets and a login + push step here.

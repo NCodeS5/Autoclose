@@ -1,0 +1,32 @@
+[
+ {
+  "id": "CASE-H1",
+  "vendor": "OfficeCo Supplies",
+  "text": "OfficeCo Supplies duplicate invoice resubmitted, voided, original kept",
+  "outcome": "rejected"
+ },
+ {
+  "id": "CASE-H2",
+  "vendor": "Brightwell Consulting",
+  "text": "Brightwell Consulting invoice exceeded fee cap, rejected pending amendment",
+  "outcome": "rejected"
+ },
+ {
+  "id": "CASE-H3",
+  "vendor": "Pioneer Property Mgmt",
+  "text": "Pioneer Property Mgmt January rent increase of 3% matched lease, approved",
+  "outcome": "approved"
+ },
+ {
+  "id": "CASE-H4",
+  "vendor": "OfficeCo Supplies",
+  "text": "OfficeCo Supplies credit memo for returned goods approved by accountant",
+  "outcome": "approved"
+ },
+ {
+  "id": "CASE-H5",
+  "vendor": "Summit Print",
+  "text": "Summit Print new vendor invoice held until onboarding completed",
+  "outcome": "rejected"
+ }
+]

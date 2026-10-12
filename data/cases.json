@@ -1,0 +1,538 @@
+[
+ {
+  "id": "C01",
+  "invoice_no": "OC-3001",
+  "vendor": "OfficeCo Supplies",
+  "date": "2026-03-02",
+  "amount": 412.5,
+  "po_amount": 412.5,
+  "category": "Office Supplies",
+  "description": "Printer paper and toner, March order",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C02",
+  "invoice_no": "OC-3002",
+  "vendor": "OfficeCo Supplies",
+  "date": "2026-03-09",
+  "amount": 1284.0,
+  "po_amount": 1270.0,
+  "category": "Office Supplies",
+  "description": "Breakroom and stationery restock",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C03",
+  "invoice_no": "DP-0301",
+  "vendor": "DataPulse Software",
+  "date": "2026-03-01",
+  "amount": 2400.0,
+  "po_amount": 2400.0,
+  "category": "Software Subscriptions",
+  "description": "Monthly subscription, 20 seats",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1",
+    "DP-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C04",
+  "invoice_no": "SF-7731",
+  "vendor": "SwiftFreight Logistics",
+  "date": "2026-03-05",
+  "amount": 3150.0,
+  "po_amount": 3100.0,
+  "category": "Freight",
+  "description": "Lane 4 freight, week 10",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C05",
+  "invoice_no": "PP-0126",
+  "vendor": "Pioneer Property Mgmt",
+  "date": "2026-01-05",
+  "amount": 6695.0,
+  "po_amount": 6695.0,
+  "category": "Rent and Facilities",
+  "description": "January rent with annual 3% increase",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1",
+    "PP-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C06",
+  "invoice_no": "CN-5502",
+  "vendor": "CloudNimbus",
+  "date": "2026-03-31",
+  "amount": 8000.0,
+  "po_amount": 8000.0,
+  "category": "Cloud Hosting",
+  "description": "March hosting, within commitment",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C07",
+  "invoice_no": "BW-1101",
+  "vendor": "Brightwell Consulting",
+  "date": "2026-02-28",
+  "amount": 3000.0,
+  "po_amount": 3000.0,
+  "category": "Professional Services",
+  "description": "Finance systems consulting, 20 hours",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1",
+    "BW-2"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C08",
+  "invoice_no": "OC-2210",
+  "vendor": "OfficeCo Supplies",
+  "date": "2026-03-12",
+  "amount": 412.5,
+  "po_amount": 412.5,
+  "category": "Office Supplies",
+  "description": "Printer paper and toner, February order (resubmitted)",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "void_duplicate",
+   "edge": null,
+   "cites": [
+    "P-4"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C09",
+  "invoice_no": "DP-0201",
+  "vendor": "DataPulse Software",
+  "date": "2026-03-14",
+  "amount": 2400.0,
+  "po_amount": 2400.0,
+  "category": "Software Subscriptions",
+  "description": "Monthly subscription, 20 seats (resubmitted)",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "void_duplicate",
+   "edge": null,
+   "cites": [
+    "P-4"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C10",
+  "invoice_no": "SF-7740",
+  "vendor": "SwiftFreight Logistics",
+  "date": "2026-03-19",
+  "amount": 2890.0,
+  "po_amount": 2900.0,
+  "category": "Office Supplies",
+  "description": "Lane 1 freight, week 11",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "recode",
+   "edge": null,
+   "cites": [
+    "P-5"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C11",
+  "invoice_no": "DP-0303",
+  "vendor": "DataPulse Software",
+  "date": "2026-03-20",
+  "amount": 2400.0,
+  "po_amount": 2400.0,
+  "category": "Professional Services",
+  "description": "Monthly subscription, 20 seats",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "recode",
+   "edge": null,
+   "cites": [
+    "P-5"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C12",
+  "invoice_no": "OC-3020",
+  "vendor": "OfficeCo Supplies",
+  "date": "2026-03-24",
+  "amount": 1390.0,
+  "po_amount": 1270.0,
+  "category": "Office Supplies",
+  "description": "Year-end stationery restock, larger order",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E1",
+   "cites": [
+    "P-2"
+   ],
+   "reviewer": "approve"
+  }
+ },
+ {
+  "id": "C13",
+  "invoice_no": "SF-7755",
+  "vendor": "SwiftFreight Logistics",
+  "date": "2026-03-26",
+  "amount": 3420.0,
+  "po_amount": 3100.0,
+  "category": "Freight",
+  "description": "Lane 4 freight, week 12",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E2",
+   "cites": [
+    "P-2"
+   ],
+   "reviewer": "reject"
+  }
+ },
+ {
+  "id": "C14",
+  "invoice_no": "BW-1102",
+  "vendor": "Brightwell Consulting",
+  "date": "2026-03-27",
+  "amount": 4500.0,
+  "po_amount": 3000.0,
+  "category": "Professional Services",
+  "description": "Finance systems consulting, extra hours",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E2",
+   "cites": [
+    "P-2"
+   ],
+   "reviewer": "reject"
+  }
+ },
+ {
+  "id": "C15",
+  "invoice_no": "BW-1103",
+  "vendor": "Brightwell Consulting",
+  "date": "2026-03-30",
+  "amount": 5000.0,
+  "po_amount": 5000.0,
+  "category": "Professional Services",
+  "description": "Finance systems consulting, close support",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E1",
+   "cites": [
+    "BW-2"
+   ],
+   "reviewer": "reject"
+  }
+ },
+ {
+  "id": "C16",
+  "invoice_no": "OC-CM-77",
+  "vendor": "OfficeCo Supplies",
+  "date": "2026-03-18",
+  "amount": -250.0,
+  "po_amount": null,
+  "category": "Office Supplies",
+  "description": "Credit memo for returned toner",
+  "doc_type": "credit_memo",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E1",
+   "cites": [
+    "P-3"
+   ],
+   "reviewer": "approve"
+  }
+ },
+ {
+  "id": "C17",
+  "invoice_no": "SF-ADJ-3",
+  "vendor": "SwiftFreight Logistics",
+  "date": "2026-03-31",
+  "amount": 380.0,
+  "po_amount": null,
+  "category": "Freight",
+  "description": "Adjusting entry: write off disputed freight balance",
+  "doc_type": "writeoff",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E1",
+   "cites": [
+    "P-3"
+   ],
+   "reviewer": "approve"
+  }
+ },
+ {
+  "id": "C18",
+  "invoice_no": "PP-INS-26",
+  "vendor": "Pioneer Property Mgmt",
+  "date": "2026-02-10",
+  "amount": 26400.0,
+  "po_amount": 26400.0,
+  "category": "Rent and Facilities",
+  "description": "Annual insurance pass-through charge",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E1",
+   "cites": [
+    "P-8"
+   ],
+   "reviewer": "approve"
+  }
+ },
+ {
+  "id": "C19",
+  "invoice_no": "HM-0042",
+  "vendor": "Harborline Marketing",
+  "date": "2026-03-22",
+  "amount": 2200.0,
+  "po_amount": null,
+  "category": "Marketing",
+  "description": "Trade show booth design services",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E3",
+   "cites": [
+    "P-6"
+   ],
+   "reviewer": "reject"
+  }
+ },
+ {
+  "id": "C20",
+  "invoice_no": "VC-8810",
+  "vendor": "Vantage Courier Co.",
+  "date": "2026-03-28",
+  "amount": 640.0,
+  "po_amount": null,
+  "category": "Freight",
+  "description": "Same-day courier deliveries",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E3",
+   "cites": [
+    "P-6"
+   ],
+   "reviewer": "reject"
+  }
+ },
+ {
+  "id": "C21",
+  "invoice_no": "BW-1104",
+  "vendor": "Brightwell Consulting",
+  "date": "2026-04-02",
+  "amount": 2100.0,
+  "po_amount": null,
+  "category": "Professional Services",
+  "description": "Miscellaneous services",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E2",
+   "cites": [],
+   "reviewer": "reject"
+  }
+ },
+ {
+  "id": "C22",
+  "invoice_no": "CN-5550",
+  "vendor": "CloudNimbus",
+  "date": "2026-03-31",
+  "amount": 9150.0,
+  "po_amount": 8000.0,
+  "category": "Cloud Hosting",
+  "description": "March hosting, usage spike from product launch traffic",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E2",
+   "cites": [
+    "P-2",
+    "P-9"
+   ],
+   "reviewer": "approve"
+  }
+ },
+ {
+  "id": "C23",
+  "invoice_no": "CN-5612",
+  "vendor": "CloudNimbus",
+  "date": "2026-04-30",
+  "amount": 9300.0,
+  "po_amount": 8000.0,
+  "category": "Cloud Hosting",
+  "description": "April hosting, usage spike from product launch traffic",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-9",
+    "CASE-C22"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C24",
+  "invoice_no": "OC-3030",
+  "vendor": "OfficeCo Supplies",
+  "date": "2026-04-09",
+  "amount": 2994.25,
+  "po_amount": 2950.0,
+  "category": "Office Supplies",
+  "description": "Office furniture order including 1.5% late fee",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "escalate",
+   "edge": "E1",
+   "cites": [
+    "P-7",
+    "OC-2"
+   ],
+   "reviewer": "reject"
+  }
+ },
+ {
+  "id": "C25",
+  "invoice_no": "DP-0302",
+  "vendor": "DataPulse Software",
+  "date": "2026-04-01",
+  "amount": 2400.0,
+  "po_amount": 2400.0,
+  "category": "Software Subscriptions",
+  "description": "Monthly subscription, 20 seats",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C26",
+  "invoice_no": "OC-3010",
+  "vendor": "OfficeCo Supplies",
+  "date": "2026-04-06",
+  "amount": 655.0,
+  "po_amount": 650.0,
+  "category": "Office Supplies",
+  "description": "Toner and folders",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C27",
+  "invoice_no": "SF-7790",
+  "vendor": "SwiftFreight Logistics",
+  "date": "2026-04-12",
+  "amount": 2980.0,
+  "po_amount": 3000.0,
+  "category": "Freight",
+  "description": "Lane 2 freight, week 15",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C28",
+  "invoice_no": "CN-5601",
+  "vendor": "CloudNimbus",
+  "date": "2026-04-30",
+  "amount": 8000.0,
+  "po_amount": 8000.0,
+  "category": "Cloud Hosting",
+  "description": "April hosting, within commitment",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1"
+   ],
+   "reviewer": null
+  }
+ }
+]

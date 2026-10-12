@@ -1,0 +1,15 @@
+# Apply ONLY after paused-case state moves to PostgreSQL; with in-memory state, extra replicas
+# would each hold a different set of pending reviews.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: autoclose
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: autoclose }
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }

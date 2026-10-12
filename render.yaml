@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: autoclose
+    runtime: python
+    region: ohio                 # same region as the Bedrock profile (us-east-2)
+    plan: starter                # free plans sleep after 15 minutes idle, which would stall a live demo
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn autoclose.api:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: AUTOCLOSE_ENV
+        value: demo                 # set to production to keep learned cases across restarts
+      - key: VECTOR_STORE
+        value: pinecone
+      - key: PINECONE_INDEX
+        value: autoclose-kb
+      - key: LLM_PROVIDER
+        value: anthropic            # switch to bedrock later: set BEDROCK_MODEL_ID, AWS_REGION and the AWS keys
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-5-5
+      - key: AGENT_MODE
+        value: workflow             # change to agentic in the Render dashboard for the free-flowing agent
+      - key: AUTOCLOSE_WORKERS
+        value: "4"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: DEMO_PASSWORD
+        sync: false
