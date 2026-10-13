@@ -8,6 +8,7 @@ from .checks import load_vendors, load_prior, DATA
 from .audit import AuditLog
 from .flow import build_flow
 from .reasoner import get_llm, CASE_MATCH_MIN
+from ..integrations.salesforce import SalesforceCases
 
 class ReviewService:
     def __init__(self, store=None, llm="auto"):
@@ -19,6 +20,7 @@ class ReviewService:
         self.audit = AuditLog()
         self.agent_mode = os.getenv("AGENT_MODE", "workflow").lower() if self.llm is not None else "workflow"
         self.lock = threading.RLock()
+        self.sf = SalesforceCases()
         self.pool = ThreadPoolExecutor(max_workers=int(os.getenv("AUTOCLOSE_WORKERS", "4")))
         self.gen = 0
         self.kb = ingest(self.store)
@@ -60,8 +62,13 @@ class ReviewService:
             r = self.flow.invoke({"invoice": inv}, cfg); ms = round((time.time() - t) * 1000)
             paused = "__interrupt__" in r
             view = self._view(inv["id"])
+            sf = None
+            if paused and self.sf.enabled:
+                sf = self.sf.open_case({**row, **view})
+                self.audit.log(inv["id"], "salesforce_case", sf)
             with self.lock:
                 row.update(view); row.update(status="needs_review" if paused else "completed", ms=ms)
+                if sf: row["salesforce"] = sf
                 if paused: row["memory_notes"] = self._notes(view.get("similar_cases"))
                 if paused and gen == self.gen: self.pending[inv["id"]] = row
         except Exception as e:
@@ -75,6 +82,13 @@ class ReviewService:
         row = self._alloc(case_id, invoice); gen = self.gen
         self.pool.submit(self._execute, row, gen)
         return row
+    def _sf_close(self, row, resolution, note, who):
+        """Close the row's Salesforce Case (if any) and record it. Never raises."""
+        sf = row.get("salesforce")
+        if not (self.sf.enabled and sf and sf.get("id")): return
+        sf = self.sf.close_case(sf, resolution, note, who)
+        self.audit.log(row["case_id"], "salesforce_closed", sf)
+        with self.lock: row["salesforce"] = sf
     def _notes(self, cases):
         """Close matches in memory, for the card: 'a person rejected a similar case'."""
         return [{"id": c["id"], "outcome": c["outcome"], "score": round(c["score"], 2)} for c in (cases or [])
@@ -103,6 +117,7 @@ class ReviewService:
             with self.lock:
                 row.update(view); row.update(status="completed", reviewer=resolution, note=note,
                                              learned=self.store.count(CASES) > before)
+            self._sf_close(row, resolution, note, "reviewer")
             if row.get("learned"):
                 try: self._sweep(cid) if resolution == "benign" else self._sweep_reject(cid)
                 except Exception: pass
@@ -151,6 +166,7 @@ class ReviewService:
                                          rationale=v.get("rationale"), citations=v.get("citations"),
                                          confidence=v.get("confidence"), passages=v.get("passages"),
                                          similar_cases=v.get("similar_cases"), was_escalated=True)
+            self._sf_close(r, "benign", note, f"agent, linked to {learned_from}")
     def _sweep_reject(self, learned_from):
         """After a person rejects an unexplained case, put similar waiting cases (same vendor, similar description) on hold.
         Hold only: nothing is ever approved this way. A case is held when the rejected case is its close match in memory."""
@@ -183,6 +199,7 @@ class ReviewService:
             view = self._view(cid)
             with self.lock:
                 r.update(view); r.update(status="completed", reviewer=None, note=note, linked_to=learned_from)
+            self._sf_close(r, "issue", note, f"agent, linked to {learned_from}")
     def decide(self, cid, resolution, note=""):
         return self._finish_decide(self._begin_decide(cid), resolution, note)
     def submit_decide(self, cid, resolution, note=""):
@@ -195,4 +212,4 @@ class ReviewService:
         return {"runs": len(self.history), "auto": len(auto), "reviewed": len([h for h in done if h.get("reviewer")]),
                 "waiting": len(self.pending), "running": len([h for h in self.history if h["status"] in ("running", "finishing", "rechecking")]), "learned": len([h for h in self.history if h.get("learned")]),
                 "guard_overrides": len([h for h in self.history if h.get("guard_notes")]),
-                "agent_mode": self.agent_mode, "build": (os.getenv("RENDER_GIT_COMMIT") or "local")[:7], "features": ["linked-approval", "linked-hold", "conflict-check"], "store": self.store.name, "provider": self.provider, "kb": self.kb, "env": self.env}
+                "agent_mode": self.agent_mode, "build": (os.getenv("RENDER_GIT_COMMIT") or "local")[:7], "features": ["linked-approval", "linked-hold", "conflict-check"], "salesforce": self.sf.enabled, "store": self.store.name, "provider": self.provider, "kb": self.kb, "env": self.env}

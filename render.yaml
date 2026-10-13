@@ -30,3 +30,9 @@ services:
         sync: false
       - key: DEMO_PASSWORD
         sync: false
+      - key: SF_DOMAIN
+        sync: false
+      - key: SF_CLIENT_ID
+        sync: false
+      - key: SF_CLIENT_SECRET
+        sync: false
