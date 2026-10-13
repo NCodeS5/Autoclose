@@ -195,4 +195,4 @@ class ReviewService:
         return {"runs": len(self.history), "auto": len(auto), "reviewed": len([h for h in done if h.get("reviewer")]),
                 "waiting": len(self.pending), "running": len([h for h in self.history if h["status"] in ("running", "finishing", "rechecking")]), "learned": len([h for h in self.history if h.get("learned")]),
                 "guard_overrides": len([h for h in self.history if h.get("guard_notes")]),
-                "agent_mode": self.agent_mode, "store": self.store.name, "provider": self.provider, "kb": self.kb, "env": self.env}
+                "agent_mode": self.agent_mode, "build": (os.getenv("RENDER_GIT_COMMIT") or "local")[:7], "features": ["linked-approval", "linked-hold", "conflict-check"], "store": self.store.name, "provider": self.provider, "kb": self.kb, "env": self.env}

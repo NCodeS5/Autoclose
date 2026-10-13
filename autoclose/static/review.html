@@ -71,7 +71,7 @@ async function refresh(){
   CASES=cs;
   const busy=m.running>0; document.querySelectorAll("button").forEach(b=>{if(b.dataset.keep!=="1")b.disabled=false});
   clearTimeout(timer); if(busy)timer=setTimeout(()=>refresh().catch(()=>{}),800);
-  $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
+  $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut","Build: "+m.build+(m.features&&m.features.includes("conflict-check")?" · latest":""))+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
   const t=[["Invoices run",m.runs+(m.running?" ("+m.running+" running)":"")],["Handled by agent",m.auto],["Reviewed by person",m.reviewed],["Waiting now",m.waiting],["Guard stepped in",m.guard_overrides],["Learned from reviews",m.learned]];
   $("tiles").innerHTML=t.map(x=>'<div class="tile"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join("");
   const ran=new Set(h.map(x=>x.case_id.replace(/-r\d+$/,"")));
