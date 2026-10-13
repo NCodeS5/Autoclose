@@ -5,6 +5,7 @@ AGENT_MODE=workflow (default, fixed steps) | agentic (this file). Needs a real m
 import json, os
 from ..rag import DOCS, CASES
 from .reasoner import comparison_note, offline_reason
+from .retrieve import retrieve
 
 MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "8"))
 
@@ -87,7 +88,17 @@ def investigate(store, inv, ck, vendors, llm, max_steps=None):
     d = {"decision": final.get("decision"), "edge": None if final.get("edge") in (None, "none", "null", "") else final["edge"],
          "confidence": float(final.get("confidence") or 0), "citations": list(final.get("citations") or []),
          "rationale": final.get("rationale", ""), "new_category": final.get("new_category") or None}
-    ref = offline_reason(inv, ck, passages, cases)
+    # The rules reference sees everything the model saw PLUS the standard planned retrieval, so it is judged on full evidence
+    # and a narrow model search cannot make the rules look stricter than they are.
+    try:
+        sp, sc = retrieve(store, inv, ck)
+    except Exception:
+        sp, sc = [], []
+    ids = {p["id"] for p in passages}
+    best = {c["id"]: c for c in cases}
+    for c in sc:                                   # keep the strongest similarity score seen for each past case
+        if c["id"] not in best or c["score"] > best[c["id"]]["score"]: best[c["id"]] = c
+    ref = offline_reason(inv, ck, passages + [p for p in sp if p["id"] not in ids], list(best.values()))
     d["reference"] = {"decision": ref["decision"], "edge": ref["edge"]}
     d["agent_steps"] = len(trace)
     return d, passages, cases, trace

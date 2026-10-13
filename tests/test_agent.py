@@ -65,3 +65,11 @@ def test_linked_approval_works_in_agentic_mode(monkeypatch):
     ev = [e for e in s.audit.events("C23") if e["step"] == "linked_recheck"]
     assert ev and "guard_notes" in ev[0]["detail"]
     assert ev[0]["detail"]["auto_resolved"], ev[0]["detail"]
+
+
+def test_failed_recheck_explains_itself(monkeypatch):
+    esc = [[("get_checks", {})], [("submit_decision", {"decision": "escalate", "edge": "E2", "confidence": 0.5, "citations": [], "rationale": "No earlier pattern."})]]
+    s = svc(ScriptedLLM(esc + esc + esc), monkeypatch)
+    s.run("C22"); s.run("C23"); s.decide("C22", "benign", "ok")
+    row = next(h for h in s.history if h["case_id"] == "C23")
+    assert row["status"] == "needs_review" and row["recheck"]["against"] == "C22" and "decision" in row["recheck"]
