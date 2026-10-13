@@ -62,6 +62,7 @@ class ReviewService:
             view = self._view(inv["id"])
             with self.lock:
                 row.update(view); row.update(status="needs_review" if paused else "completed", ms=ms)
+                if paused: row["memory_notes"] = self._notes(view.get("similar_cases"))
                 if paused and gen == self.gen: self.pending[inv["id"]] = row
         except Exception as e:
             with self.lock: row.update(status="failed", ms=round((time.time() - t) * 1000), rationale=f"Run failed: {str(e)[:300]}")
@@ -74,6 +75,13 @@ class ReviewService:
         row = self._alloc(case_id, invoice); gen = self.gen
         self.pool.submit(self._execute, row, gen)
         return row
+    def _notes(self, cases):
+        """Close matches in memory, for the card: 'a person rejected a similar case'."""
+        return [{"id": c["id"], "outcome": c["outcome"], "score": round(c["score"], 2)} for c in (cases or [])
+                if c.get("outcome") in ("approved", "rejected") and c.get("score", 0) >= CASE_MATCH_MIN]
+    def _memory_notes(self, inv, exclude):
+        hits = self.store.search(CASES, f'{inv["vendor"]} {inv["category"]} {inv["description"]}', 5, {"vendor": inv["vendor"]})
+        return self._notes([{"id": h.id, "outcome": h.meta.get("outcome"), "score": h.score} for h in hits if h.id != f"CASE-{exclude}"])
     def _view(self, cid):
         v = self.flow.get_state({"configurable": {"thread_id": cid}}).values
         d = v.get("decision", {})
@@ -126,8 +134,10 @@ class ReviewService:
                 why = {"against": learned_from, "error": f"{type(e).__name__}: {e}"[:200]}
                 self.audit.log(cid, "linked_recheck", {"triggered_by": learned_from, "error": str(e)[:200]})
             if not ok:
+                try: notes = self._memory_notes(r["invoice"], cid)
+                except Exception: notes = r.get("memory_notes")
                 with self.lock:
-                    r["status"] = "needs_review"; r["recheck"] = why
+                    r["status"] = "needs_review"; r["recheck"] = why; r["memory_notes"] = notes
                 continue
             note = f"Auto-resolved: same pattern as {learned_from}, approved by a person."
             with self.lock:
@@ -148,16 +158,21 @@ class ReviewService:
             others = [r for c, r in self.pending.items() if c != learned_from and r.get("edge") == "E2"]
             for r in others: r["status"] = "rechecking"
         for r in others:
-            cid, inv = r["case_id"], r["invoice"]; match = None
+            cid, inv = r["case_id"], r["invoice"]; match = None; notes = r.get("memory_notes"); conflict = None
             try:
-                hits = self.store.search(CASES, f'{inv["vendor"]} {inv["category"]} {inv["description"]}', 3, {"vendor": inv["vendor"]})
-                match = next((h for h in hits if h.id == f"CASE-{learned_from}" and h.score >= CASE_MATCH_MIN), None)
+                notes = self._memory_notes(inv, "")
+                match = next((n for n in notes if n["id"] == f"CASE-{learned_from}" and n["outcome"] == "rejected"), None)
+                conflict = next((n for n in notes if n["outcome"] == "approved"), None) if match else None
                 self.audit.log(cid, "linked_hold_check", {"triggered_by": learned_from, "matched": bool(match),
-                                                          "score": round(match.score, 3) if match else None})
+                                                          "score": match["score"] if match else None,
+                                                          "conflicting_approved_case": conflict["id"] if conflict else None})
             except Exception as e:
                 self.audit.log(cid, "linked_hold_check", {"triggered_by": learned_from, "error": str(e)[:200]})
-            if not match:
-                with self.lock: r["status"] = "needs_review"
+            if not match or conflict:
+                with self.lock:
+                    r["status"] = "needs_review"; r["memory_notes"] = notes
+                    if conflict:
+                        r["recheck"] = {"against": learned_from, "message": f"Conflicting history: a person rejected {learned_from} but approved the similar case {conflict['id']}, so it was not held automatically. A person must decide."}
                 continue
             note = f"Held automatically: same pattern as {learned_from}, which a person rejected. Nothing was approved."
             with self.lock:

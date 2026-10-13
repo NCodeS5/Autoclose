@@ -59,6 +59,10 @@ function outcome(h){
   return pill(c,t)+'<span class="hint"> '+esc(by)+'</span>';}
 const steps=h=>{const t=h.trace||[];if(!t.length)return"";
   return '<div class="box" style="margin-top:12px"><h3>Agent steps (chosen by the model)</h3>'+t.map(x=>'<div class="pas"><b>'+x.step+'. '+esc(x.tool)+'</b> <span class="mono">'+esc(x.args&&x.args.query?x.args.query:(x.args&&x.args.decision?x.args.decision+" · edge "+x.args.edge+" · conf "+x.args.confidence:""))+'</span>'+(x.found?' <span class="hint">→ '+esc(x.found.join(", ")||"nothing")+'</span>':"")+'</div>').join("")+'</div>';};
+const mem=h=>(h.memory_notes||[]).map(n=>'<div class="hint"'+(n.outcome==="rejected"?' style="color:var(--bad)"':'')+'>'+(n.outcome==="rejected"?"Heads up: a person rejected a similar case, ":"A person approved a similar case, ")+esc(n.id.replace("CASE-",""))+' (similarity '+n.score+')</div>').join("");
+const recheck=h=>{const x=h.recheck;if(!x)return"";if(x.message)return '<div class="hint" style="margin-top:6px;color:var(--bad)">'+esc(x.message)+'</div>';
+  const bits=x.error?["error: "+x.error]:["re-check decided "+(x.proposed||x.decision)+" (confidence "+x.confidence+")",x.cites_learned_case?"cited the approved case":"did not cite the approved case"].concat(x.guard_notes||[]);
+  return '<div class="hint" style="margin-top:6px"><b>Re-checked after '+esc(x.against)+' was approved, still needs a person:</b> '+esc(bits.join(" · "))+(x.rationale?'<br>'+esc(x.rationale):"")+'</div>';};
 const cites=(h)=>(h.citations||[]).map(c=>'<span class="id">'+esc(c)+'</span>').join(", ")||"—";
 let CASES=[];
 let timer=null;
@@ -88,8 +92,8 @@ function facts(h){const i=h.invoice,c=h.checks||{};
   '<div class="row" style="margin-top:4px">'+(c.variance_pct!=null?pill("mut","variance "+c.variance_pct+"%"):"")+(c.duplicate_of?pill("bad","duplicate of "+c.duplicate_of):"")+(!c.known_vendor?pill("bad","unknown vendor"):"")+(c.category_mismatch?pill("warn","category mismatch"):"")+(c.late_fee?pill("warn","late fee"):"")+(c.ytd_billed!=null?pill("mut","billed this year "+money(c.ytd_billed)):"")+'</div>';}
 function card(h){
   const g=(h.guard_notes||[]).map(n=>'<div class="hint" style="color:var(--bad)">Guard: '+esc(n)+'</div>').join("");
-  return '<div class="case"><div class="row">'+pill("warn",EDGE[h.edge]||"Audit sample")+' <b>'+h.case_id+'</b></div><div style="margin:8px 0">'+facts(h)+'</div>'+
-  '<div class="grid2"><div class="box"><h3>Agent says</h3><div>'+esc(h.rationale||"No rationale. The guard stopped this.")+'</div><div class="hint" style="margin-top:6px">Confidence '+(h.confidence!=null?h.confidence:"–")+' · Cites '+cites(h)+'</div>'+g+'</div>'+
+  return '<div class="case"><div class="row">'+pill("warn",EDGE[h.edge]||"Audit sample")+' <b>'+h.case_id+'</b></div><div style="margin:8px 0">'+facts(h)+mem(h)+'</div>'+
+  '<div class="grid2"><div class="box"><h3>Agent says</h3><div>'+esc(h.rationale||"No rationale. The guard stopped this.")+'</div><div class="hint" style="margin-top:6px">Confidence '+(h.confidence!=null?h.confidence:"–")+' · Cites '+cites(h)+'</div>'+g+recheck(h)+'</div>'+
   '<div class="box"><h3>Evidence retrieved</h3><div class="scroll" style="max-height:200px">'+evidence(h)+'</div></div></div>'+
   '<div class="row" style="margin-top:10px"><input type="text" id="n-'+h.case_id+'" placeholder="Optional note">'+
   '<button class="btn go" onclick="decide(\''+h.case_id+'\',\'benign\')">Approve</button><button class="btn stop" onclick="decide(\''+h.case_id+'\',\'issue\')">Reject</button></div></div>';}

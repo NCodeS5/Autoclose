@@ -200,3 +200,37 @@ def test_rejection_holds_similar_waiting_case_and_never_approves(monkeypatch):
     rows = {h["case_id"]: h for h in s.history}
     assert rows["C13b"]["status"] == "completed" and rows["C13b"]["final"] == "held" and rows["C13b"]["linked_to"] == "C13"
     assert rows["C19"]["status"] == "needs_review"
+
+
+def test_guard_blocks_approval_when_similar_case_was_rejected():
+    from autoclose.review.guard import guard
+    ck = {"doc_type": "invoice", "known_vendor": True, "total": 9000, "duplicate_of": None, "variance_pct": 15.0, "ytd_billed": 1.0}
+    inv = {"amount": 9000}
+    d = {"decision": "approve", "edge": None, "confidence": 0.9, "citations": ["CASE-A"], "rationale": "Same pattern as earlier case."}
+    cases = [{"id": "CASE-A", "text": "x", "outcome": "approved", "score": 0.7}, {"id": "CASE-B", "text": "y", "outcome": "rejected", "score": 0.6}]
+    g = guard(d, inv, ck, [], cases)
+    assert g["decision"] == "escalate" and any("conflicting history" in n and "CASE-B" in n for n in g["guard_notes"])
+
+
+def test_card_warns_when_a_similar_case_was_rejected(monkeypatch):
+    from autoclose.review.service import ReviewService
+    monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
+    s = ReviewService(llm=None)
+    s.run("C22"); s.decide("C22", "issue", "no")           # a person rejects the first CloudNimbus spike
+    r = s.run("C23")                                        # the similar one must not auto-approve
+    assert r["status"] == "needs_review"
+    assert any(n["outcome"] == "rejected" and n["id"] == "CASE-C22" for n in r["memory_notes"])
+    assert "rejected a similar" in r["rationale"]
+
+
+def test_rejection_does_not_hold_when_history_conflicts(monkeypatch):
+    from autoclose.review.service import ReviewService
+    from autoclose.rag import Chunk, CASES
+    monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
+    s = ReviewService(llm=None)
+    s.run("C13"); s.run(invoice=_clone(s, "C13", "C13b", invoice_no="SF-9999", description="Lane 4 freight, week 13"))
+    s.store.upsert(CASES, [Chunk("CASE-EARLIER", "SwiftFreight Logistics Freight Lane 4 freight, week 11 approved by reviewer after variance of 11 percent",
+                                 {"vendor": "SwiftFreight Logistics", "outcome": "approved", "title": "EARLIER"})])
+    s.decide("C13", "issue", "no")
+    row = next(h for h in s.history if h["case_id"] == "C13b")
+    assert row["status"] == "needs_review" and "Conflicting history" in row["recheck"]["message"]

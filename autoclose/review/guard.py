@@ -1,9 +1,10 @@
 """Guard: checks the reasoner's decision before anyone acts on it. Hard rules live here, in code,
 so no model output can approve a write-off, an unknown vendor, a duplicate or a $25,000+ invoice."""
-import re
+import os, re
 
 MIN_CONFIDENCE = 0.75
 MATERIALITY = 25000.0
+CASE_MATCH_MIN = float(os.getenv("CASE_MATCH_MIN", "0.35"))
 
 def _numbers(text):
     """Numbers as values, so $6,695 equals $6,695.00 and a trailing full stop is ignored."""
@@ -58,6 +59,12 @@ def guard(d, inv, ck, passages, cases) -> dict:
         g.update(decision="escalate", edge="E2", safety_net=True); notes.append(f"safety net: cited ids not retrieved {bad}")
     if g["decision"] in ("approve", "void_duplicate", "recode") and not g.get("citations"):
         g.update(decision="escalate", edge="E2", safety_net=True); notes.append("safety net: no citation for an automatic action")
+    # conflicting history: an approval that leans on an earlier case is not allowed when a person rejected a similar one
+    if g["decision"] == "approve" and any(str(c).startswith("CASE-") for c in g.get("citations", [])):
+        rej = next((c for c in cases if c["outcome"] == "rejected" and c["score"] >= CASE_MATCH_MIN), None)
+        if rej:
+            g.update(decision="escalate", edge="E2")
+            notes.append(f'conflicting history: a person rejected the similar case {rej["id"]} (similarity {rej["score"]:.2f}), so a person must decide')
     # numbers in the rationale must exist in the evidence
     if g.get("rationale"):
         text = g["rationale"]
