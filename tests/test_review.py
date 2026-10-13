@@ -170,3 +170,33 @@ def test_approval_resolves_linked_waiting_case(monkeypatch):
     rows = {h["case_id"]: h for h in s.history}
     assert rows["C23"]["status"] == "completed" and rows["C23"]["linked_to"] == "C22" and "CASE-C22" in rows["C23"]["citations"]
     assert not s.pending
+
+
+def _clone(s, base, new_id, **kw):
+    inv = {k: v for k, v in s.cases[base].items() if k != "expected"}
+    inv.update(id=new_id, **kw)
+    return inv
+
+
+def test_approval_resolves_related_case_for_non_usage_vendor(monkeypatch):
+    """A person approves one SwiftFreight overage; a similar waiting SwiftFreight overage resolves itself."""
+    from autoclose.review.service import ReviewService
+    monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
+    s = ReviewService(llm=None)
+    a = s.run("C13"); b = s.run(invoice=_clone(s, "C13", "C13b", invoice_no="SF-9999", description="Lane 4 freight, week 13"))
+    assert a["status"] == "needs_review" and b["status"] == "needs_review"
+    s.decide("C13", "benign", "ok")
+    row = next(h for h in s.history if h["case_id"] == "C13b")
+    assert row["status"] == "completed" and row["linked_to"] == "C13" and row["final"] == "approved"
+
+
+def test_rejection_holds_similar_waiting_case_and_never_approves(monkeypatch):
+    from autoclose.review.service import ReviewService
+    monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
+    s = ReviewService(llm=None)
+    s.run("C13"); s.run(invoice=_clone(s, "C13", "C13b", invoice_no="SF-9999", description="Lane 4 freight, week 13"))
+    s.run("C19")                                       # unrelated waiting case must stay waiting
+    s.decide("C13", "issue", "no")
+    rows = {h["case_id"]: h for h in s.history}
+    assert rows["C13b"]["status"] == "completed" and rows["C13b"]["final"] == "held" and rows["C13b"]["linked_to"] == "C13"
+    assert rows["C19"]["status"] == "needs_review"

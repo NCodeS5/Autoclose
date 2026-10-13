@@ -7,7 +7,7 @@ from ..rag import get_store, ingest, CASES
 from .checks import load_vendors, load_prior, DATA
 from .audit import AuditLog
 from .flow import build_flow
-from .reasoner import get_llm
+from .reasoner import get_llm, CASE_MATCH_MIN
 
 class ReviewService:
     def __init__(self, store=None, llm="auto"):
@@ -95,8 +95,8 @@ class ReviewService:
             with self.lock:
                 row.update(view); row.update(status="completed", reviewer=resolution, note=note,
                                              learned=self.store.count(CASES) > before)
-            if resolution == "benign" and row.get("learned"):
-                try: self._sweep(cid)
+            if row.get("learned"):
+                try: self._sweep(cid) if resolution == "benign" else self._sweep_reject(cid)
                 except Exception: pass
         except Exception as e:
             with self.lock: row.update(status="failed", rationale=f"Finalizing failed: {str(e)[:300]}")
@@ -108,22 +108,26 @@ class ReviewService:
             others = [r for c, r in self.pending.items() if c != learned_from]
             for r in others: r["status"] = "rechecking"
         for r in others:
-            cid = r["case_id"]; ok = False
+            cid = r["case_id"]; ok = False; why = None
             try:
                 with self.lock: self.runs[cid + "~chk"] += 1; tid = f"{cid}~chk{self.runs[cid + '~chk']}"
                 res = self.flow.invoke({"invoice": r["invoice"] | {"id": tid}}, {"configurable": {"thread_id": tid}})
                 v = self._view(tid)
                 ok = ("__interrupt__" not in res and v.get("final") == "approved"
                       and f"CASE-{learned_from}" in (v.get("citations") or []))
+                why = {"against": learned_from, "decision": v.get("decision"), "proposed": v.get("proposed"), "confidence": v.get("confidence"),
+                       "cites_learned_case": f"CASE-{learned_from}" in (v.get("citations") or []), "guard_notes": v.get("guard_notes") or [],
+                       "rationale": (v.get("rationale") or "")[:300]}
                 self.audit.log(cid, "linked_recheck", {"triggered_by": learned_from, "auto_resolved": ok,
                                                        "decision": v.get("decision"), "proposed": v.get("proposed"),
                                                        "confidence": v.get("confidence"), "citations": v.get("citations"),
                                                        "guard_notes": v.get("guard_notes"), "rationale": (v.get("rationale") or "")[:300]})
             except Exception as e:
+                why = {"against": learned_from, "error": f"{type(e).__name__}: {e}"[:200]}
                 self.audit.log(cid, "linked_recheck", {"triggered_by": learned_from, "error": str(e)[:200]})
             if not ok:
                 with self.lock:
-                    r["status"] = "needs_review"
+                    r["status"] = "needs_review"; r["recheck"] = why
                 continue
             note = f"Auto-resolved: same pattern as {learned_from}, approved by a person."
             with self.lock:
@@ -137,6 +141,33 @@ class ReviewService:
                                          rationale=v.get("rationale"), citations=v.get("citations"),
                                          confidence=v.get("confidence"), passages=v.get("passages"),
                                          similar_cases=v.get("similar_cases"), was_escalated=True)
+    def _sweep_reject(self, learned_from):
+        """After a person rejects an unexplained case, put similar waiting cases (same vendor, similar description) on hold.
+        Hold only: nothing is ever approved this way. A case is held when the rejected case is its close match in memory."""
+        with self.lock:
+            others = [r for c, r in self.pending.items() if c != learned_from and r.get("edge") == "E2"]
+            for r in others: r["status"] = "rechecking"
+        for r in others:
+            cid, inv = r["case_id"], r["invoice"]; match = None
+            try:
+                hits = self.store.search(CASES, f'{inv["vendor"]} {inv["category"]} {inv["description"]}', 3, {"vendor": inv["vendor"]})
+                match = next((h for h in hits if h.id == f"CASE-{learned_from}" and h.score >= CASE_MATCH_MIN), None)
+                self.audit.log(cid, "linked_hold_check", {"triggered_by": learned_from, "matched": bool(match),
+                                                          "score": round(match.score, 3) if match else None})
+            except Exception as e:
+                self.audit.log(cid, "linked_hold_check", {"triggered_by": learned_from, "error": str(e)[:200]})
+            if not match:
+                with self.lock: r["status"] = "needs_review"
+                continue
+            note = f"Held automatically: same pattern as {learned_from}, which a person rejected. Nothing was approved."
+            with self.lock:
+                if self.pending.get(cid) is not r: continue
+                self.pending.pop(cid); r["status"] = "finishing"
+            self.flow.invoke(Command(resume={"resolution": "issue", "note": note, "linked": learned_from}),
+                             {"configurable": {"thread_id": cid}})
+            view = self._view(cid)
+            with self.lock:
+                r.update(view); r.update(status="completed", reviewer=None, note=note, linked_to=learned_from)
     def decide(self, cid, resolution, note=""):
         return self._finish_decide(self._begin_decide(cid), resolution, note)
     def submit_decide(self, cid, resolution, note=""):

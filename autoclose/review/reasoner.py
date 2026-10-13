@@ -66,10 +66,11 @@ def offline_reason(inv, ck, passages, cases) -> dict:
                    f"Invoice is {var:+.2f}% from the purchase order, above the {mt.group(1)}% tolerance. The AP Manager must approve this overage.")
     # large unexplained variance: allowed only if a person already approved the same vendor pattern
     for c in cases:
-        if c["outcome"] == "approved" and c["score"] >= CASE_MATCH_MIN and ck["usage_based"]:
-            pu, _ = _find(passages, r"usage")
-            return out("approve", None, 0.85, [x for x in [pu and pu["id"], c["id"]] if x],
-                       f'Variance is {var:+.2f}%. A person already approved the same usage pattern for this vendor ({c["id"]}), which policy allows us to follow.')
+        if c["outcome"] == "approved" and c["score"] >= CASE_MATCH_MIN:
+            pu, _ = _find(passages, r"usage") if ck["usage_based"] else (None, None)
+            pol = pu or po_ or pt
+            return out("approve", None, 0.85, [x for x in [pol and pol["id"], c["id"]] if x],
+                       f'Variance is {var:+.2f}%. A person already approved the same pattern for this vendor ({c["id"]}), which policy allows us to follow.')
     return out("escalate", "E2", 0.7, [po_["id"]] if po_ else [pt["id"]],
                f"Invoice is {var:+.2f}% from the purchase order, beyond the {mo.group(1) if mo else '10'}% limit, with no earlier approved pattern to rely on.")
 
@@ -117,12 +118,13 @@ def comparison_note(ck, passages, cases=()) -> str:
         cap = _num(mc.group(1)); ytd = ck["ytd_billed"]
         parts.append(f"Computed by code: billed this contract year including this invoice is ${ytd:,.2f}, which is "
                      f"{'ABOVE' if ytd > cap else 'within'} the ${cap:,.0f} contract cap.")
-    if ck.get("usage_based") and var is not None and abs(var) > 10:
+    if var is not None and abs(var) > 10:
         for c in cases:
             if c["outcome"] == "approved" and c["score"] >= CASE_MATCH_MIN:
-                parts.append(f'Computed by code: for this same usage-based vendor, a person already approved the earlier case {c["id"]} '
-                             f'(similarity {c["score"]:.2f}). Policy P-9 lets you follow an earlier approved usage pattern for the same '
-                             f'vendor, even if the percentage differs somewhat, so you may approve and cite {c["id"]} and P-9.')
+                cite = "P-9" if ck.get("usage_based") else "P-2"
+                parts.append(f'Computed by code: for this same vendor, a person already approved the earlier case {c["id"]} '
+                             f'(similarity {c["score"]:.2f}). Policy {cite} lets you follow an earlier approved pattern for the same '
+                             f'vendor and cause, even if the percentage differs somewhat, so you may approve and cite {c["id"]} and {cite}.')
                 break
     return " ".join(parts) or "No variance comparison is available."
 

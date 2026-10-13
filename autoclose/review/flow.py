@@ -80,11 +80,12 @@ def build_flow(store, vendors, prior, audit, llm=None, audit_rate=0.0, seed=1, a
         if final == "recoded": act = {"action": "recode", "invoice": s["invoice"]["invoice_no"], "to": d.get("new_category")}
         log(s, "final", {"final": final, "action": act}); return {"final": final, "proposed_action": act}
     def n_feedback(s):
-        """A reviewer-approved case becomes memory the next similar case can cite. Cases auto-resolved from another approval are not learned again."""
+        """A reviewer-decided unexplained case becomes memory the next similar case can cite (approved or rejected). Cases auto-resolved from another decision are not learned again."""
         h, inv = s.get("human"), s["invoice"]
-        if h and not h.get("linked") and h["resolution"] == "benign" and s["decision"].get("edge") == "E2":
-            text = f'{inv["vendor"]} {inv["category"]} {inv["description"]} approved by reviewer after variance of {s["checks"]["variance_pct"]} percent'
-            chunk = Chunk(f'CASE-{inv["id"]}', text, {"vendor": inv["vendor"], "outcome": "approved", "title": inv["id"]})
+        if h and not h.get("linked") and s["decision"].get("edge") == "E2":
+            word, outcome = ("approved", "approved") if h["resolution"] == "benign" else ("rejected", "rejected")
+            text = f'{inv["vendor"]} {inv["category"]} {inv["description"]} {word} by reviewer after variance of {s["checks"]["variance_pct"]} percent'
+            chunk = Chunk(f'CASE-{inv["id"]}', text, {"vendor": inv["vendor"], "outcome": outcome, "title": inv["id"]})
             t = time.time(); store.upsert(CASES, [chunk]); visible = store.wait_visible(CASES, chunk)
             log(s, "feedback", {"saved": chunk.id, "searchable": visible, "ms": round((time.time() - t) * 1000)})
         return {}
