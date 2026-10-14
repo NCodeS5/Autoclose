@@ -45,3 +45,37 @@ def test_disabled_without_settings(monkeypatch):
     s = svc(monkeypatch, Fake(), enabled=False)
     assert s.metrics()["salesforce"] is False
     assert "salesforce" not in s.run("C16") or s.run("C16").get("salesforce") is None
+
+class FakeV(Fake):
+    """Fake org that knows one Account."""
+    def request(self, method, url, **kw):
+        if self.fail: raise RuntimeError("boom")
+        self.calls.append((method, url.split("/data/")[1], kw.get("json")))
+        if method == "GET" and "/query" in url:
+            from urllib.parse import unquote
+            hit = "OfficeCo Supplies" in unquote(url)
+            return R({"records": [{"Id": "001A", "Name": "OfficeCo Supplies", "Industry": "Retail", "Owner": {"Name": "Neha Sharma"}}] if hit else []})
+        return super().request(method, url, **kw)
+
+def test_vendor_lookup_shown_and_in_case(monkeypatch):
+    f = FakeV(); s = svc(monkeypatch, f)
+    row = s.run("C16")
+    assert row["sf_vendor"]["found"] is True and row["sf_vendor"]["owner"] == "Neha Sharma"
+    case_call = [c for c in f.calls if c[0] == "POST" and c[1].endswith("/sobjects/Case")][0]
+    assert "Salesforce vendor record: OfficeCo Supplies" in case_call[2]["Description"]
+    assert any(e["step"] == "salesforce_vendor" for e in s.audit.events("C16"))
+
+def test_vendor_quote_is_escaped(monkeypatch):
+    f = FakeV(); svc(monkeypatch, f)
+    sf = sfm.SalesforceCases(); sf.find_vendor("O'Brien & Co")
+    from urllib.parse import unquote
+    assert "O\\'Brien" in unquote(f.calls[-1][1])
+
+def test_seed_creates_missing_accounts(monkeypatch):
+    f = FakeV(); s = svc(monkeypatch, f)
+    out = s.seed_sf_vendors()
+    assert "OfficeCo Supplies" in out["existing"] and len(out["created"]) == len(s.vendors) - 1 and not out["errors"]
+
+def test_vendor_lookup_failure_never_blocks(monkeypatch):
+    s = svc(monkeypatch, Fake(fail=True))
+    assert s.run("C16")["status"] == "needs_review"

@@ -25,6 +25,36 @@ tr.click{cursor:pointer}tr.click:hover td{background:var(--bg)}
 .id{font-family:ui-monospace,Consolas,monospace;font-weight:600;color:var(--acc)}
 input[type=text]{flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
 .scroll{max-height:340px;overflow:auto}.box .scroll{overflow-x:hidden;overflow-wrap:anywhere}.empty{color:var(--mut);padding:6px 0}.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+
+/* polish layer: visual only */
+:root{--sh:0 1px 2px rgba(20,20,15,.05),0 6px 18px rgba(20,20,15,.05);--r:14px}
+body{background:radial-gradient(1200px 380px at 50% -140px,var(--accbg),transparent 70%),var(--bg);letter-spacing:-.005em;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px;padding-top:34px}
+h1{font-size:28px;font-weight:700;letter-spacing:-.025em;display:flex;align-items:center;gap:12px}
+h1::before{content:"";width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--acc),#0b8ccf);box-shadow:0 4px 12px rgba(43,79,163,.35);flex:none}
+.sub{font-size:15px;max-width:760px;margin-bottom:16px}
+.tiles{gap:12px}
+.tile{border-radius:var(--r);box-shadow:var(--sh);padding:14px 16px;transition:transform .15s,box-shadow .15s;position:relative;overflow:hidden}
+.tile::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--acc);opacity:.55}
+.tile:hover{transform:translateY(-2px)}
+.tile b{font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.15}.tile span{font-size:12.5px}
+.card{border-radius:16px;box-shadow:var(--sh);padding:20px}
+h2{font-size:17px;font-weight:700;letter-spacing:-.01em;margin-bottom:2px}
+.pill{font-weight:600;padding:2px 10px;letter-spacing:0}
+.btn{border-radius:10px;padding:8px 16px;box-shadow:0 1px 2px rgba(0,0,0,.12);transition:filter .12s,transform .06s}
+.btn:hover{filter:brightness(1.08)}.btn:active{transform:translateY(1px)}.btn.ghost{box-shadow:none}
+.btn.go,.btn.stop{padding:8px 18px}
+th{text-transform:uppercase;letter-spacing:.06em;font-size:11px;font-weight:600;padding-bottom:9px}
+td{padding:10px 8px}
+tr.click:hover td{background:var(--accbg)}
+.case{border-radius:14px;padding:16px;background:var(--card);box-shadow:var(--sh);border-color:var(--line)}
+.box{border-radius:10px;padding:12px 14px;line-height:1.55}
+.box h3{letter-spacing:.07em}
+.pas.cited{border-radius:6px}
+input[type=text]{border-radius:10px;padding:9px 12px}input[type=text]:focus{outline:2px solid var(--acc);outline-offset:1px}
+a{text-decoration:none}a:hover .pill{filter:brightness(.95);text-decoration:underline}
+.scroll::-webkit-scrollbar{width:8px}.scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+#status{margin-bottom:6px}
 </style></head><body><div class="wrap">
 <h1>AutoClose · Invoice Review</h1>
 <p class="sub">An agent checks each invoice against company policy and the vendor contract, cites the clauses it used, and stops to ask a person only for edge cases. All data is invented.</p>
@@ -32,7 +62,7 @@ input[type=text]{flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--
 <div class="tiles" id="tiles"></div>
 
 <div class="card"><div class="row sp"><div><h2>1. Invoices</h2><p class="hint" style="margin:0">Run one to watch the agent work, or run all 28.</p></div>
-<div class="row"><button class="btn" onclick="runAll()">Run all</button><button class="btn ghost" onclick="resetAll()">Reset</button></div></div>
+<div class="row"><button class="btn" onclick="runAll()">Run all</button><button class="btn ghost" onclick="resetAll()">Reset</button><button class="btn ghost" id="sfseed" style="display:none" onclick="seedSf()">Create vendors in Salesforce</button></div></div>
 <div class="scroll" style="margin-top:10px"><table id="cases"></table></div></div>
 
 <div class="card"><h2>2. Needs your review <span id="qcount" class="pill p-warn">0</span></h2>
@@ -71,7 +101,7 @@ async function refresh(){
   CASES=cs;
   const busy=m.running>0; document.querySelectorAll("button").forEach(b=>{if(b.dataset.keep!=="1")b.disabled=false});
   clearTimeout(timer); if(busy)timer=setTimeout(()=>refresh().catch(()=>{}),800);
-  $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut","Build: "+m.build+(m.features&&m.features.includes("conflict-check")?" · latest":""))+(m.salesforce?pill("acc","Salesforce: connected"):"")+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
+  $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut","Build: "+m.build+(m.features&&m.features.includes("conflict-check")?" · latest":""))+(m.salesforce?pill("acc","Salesforce: connected"):"")+(function(){const b=$("sfseed");if(b)b.style.display=m.salesforce?"":"none";return""})()+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
   const t=[["Invoices run",m.runs+(m.running?" ("+m.running+" running)":"")],["Handled by agent",m.auto],["Reviewed by person",m.reviewed],["Waiting now",m.waiting],["Guard stepped in",m.guard_overrides],["Learned from reviews",m.learned]];
   $("tiles").innerHTML=t.map(x=>'<div class="tile"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join("");
   const ran=new Set(h.map(x=>x.case_id.replace(/-r\d+$/,"")));
@@ -89,7 +119,7 @@ function evidence(h){
   return ps.map(p=>'<div class="pas '+(cited.has(p.id)?'cited':'')+'"><span class="id">'+esc(p.id)+'</span> '+esc(p.text)+'</div>').join("")||'<div class="empty">Nothing retrieved.</div>';}
 function facts(h){const i=h.invoice,c=h.checks||{};
   return '<div><b>'+esc(i.vendor)+'</b> · '+esc(i.invoice_no)+' · '+money(i.amount)+(i.po_amount!=null?' vs PO '+money(i.po_amount):' (no PO)')+'</div><div class="hint">'+esc(i.description)+'</div>'+
-  '<div class="row" style="margin-top:4px">'+(c.variance_pct!=null?pill("mut","variance "+c.variance_pct+"%"):"")+(c.duplicate_of?pill("bad","duplicate of "+c.duplicate_of):"")+(!c.known_vendor?pill("bad","unknown vendor"):"")+(c.category_mismatch?pill("warn","category mismatch"):"")+(c.late_fee?pill("warn","late fee"):"")+(c.ytd_billed!=null?pill("mut","billed this year "+money(c.ytd_billed)):"")+'</div>';}
+  '<div class="row" style="margin-top:4px">'+(c.variance_pct!=null?pill("mut","variance "+c.variance_pct+"%"):"")+(c.duplicate_of?pill("bad","duplicate of "+c.duplicate_of):"")+(!c.known_vendor?pill("bad","unknown vendor"):"")+sfv(h)+(c.category_mismatch?pill("warn","category mismatch"):"")+(c.late_fee?pill("warn","late fee"):"")+(c.ytd_billed!=null?pill("mut","billed this year "+money(c.ytd_billed)):"")+'</div>';}
 function card(h){
   const g=(h.guard_notes||[]).map(n=>'<div class="hint" style="color:var(--bad)">Guard: '+esc(n)+'</div>').join("");
   return '<div class="case"><div class="row">'+pill("warn",EDGE[h.edge]||"Audit sample")+' <b>'+h.case_id+'</b>'+sfl(h)+'</div><div style="margin:8px 0">'+facts(h)+mem(h)+'</div>'+
@@ -104,6 +134,8 @@ async function detail(id){
    '<div class="grid2"><div class="box"><h3>Decision</h3><div>'+esc(x.rationale||"")+'</div><div class="hint">Confidence '+(x.confidence!=null?x.confidence:"–")+' · Model: '+esc(x.provider)+'</div>'+'</div><div class="box"><h3>Evidence</h3><div class="scroll" style="max-height:200px">'+evidence(x)+'</div></div></div>'+
    steps(x)+'<div class="box" style="margin-top:12px"><h3>Audit trail</h3>'+a.map(e=>'<div class="pas"><b>'+esc(e.step)+'</b> <span class="mono">'+esc(JSON.stringify(e.detail).slice(0,220))+'</span></div>').join("")+'</div></div>';
   $("detail").scrollIntoView({behavior:"smooth"});}
+function sfv(h){const v=h.sf_vendor;if(!v)return'';if(v.found)return' <a href="'+v.url+'" target="_blank">'+pill('acc','Salesforce account: '+esc(v.owner||'found'))+'</a>';return v.found===false?' '+pill('warn','not in Salesforce'):''}
+async function seedSf(){try{const r=await api("/review/salesforce/seed-vendors",{});alert("Salesforce vendors. Created: "+r.created.length+", already there: "+r.existing.length+(r.errors.length?", errors: "+r.errors[0]:""))}catch(e){alert(e.message)}}
 function sfl(h){const s=h.salesforce;if(!s)return'';if(s.error)return' '+pill('bad','Salesforce error');return' <a href="'+s.url+'" target="_blank">'+pill('acc','Salesforce Case '+(s.number||'')+(s.status==='Closed'?' · closed':''))+'</a>'}
 async function runOne(id){try{await api("/review/run?wait=false",{case_id:id});await refresh()}catch(e){alert(e.message)}}
 async function runAll(){try{await api("/review/run-all?wait=false",{});await refresh()}catch(e){alert(e.message)}}

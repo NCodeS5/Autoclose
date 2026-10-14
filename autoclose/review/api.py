@@ -51,5 +51,8 @@ def audit(case_id: str): return svc().audit.events(case_id)
 @router.get("/metrics")
 def metrics(): return svc().metrics()
 
+@router.post("/salesforce/seed-vendors")
+def seed_vendors(): return svc().seed_sf_vendors()
+
 @router.post("/reset")
 def reset(): svc().reset(); return {"ok": True}
