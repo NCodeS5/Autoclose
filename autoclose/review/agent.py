@@ -37,10 +37,6 @@ TOOLS = [
          "required": ["decision", "edge", "confidence", "citations", "rationale"]}},
 ]
 
-SF_LOOKUP = None          # set by the service when Salesforce is connected: callable(vendor_name) -> dict
-SF_TOOL = {"name": "lookup_salesforce_vendor", "description": "Look up this vendor as an Account in the company's Salesforce org (account owner, industry). Read only; use it when you want to know who owns the vendor relationship.",
-           "input_schema": {"type": "object", "properties": {}}}
-
 def investigate(store, inv, ck, vendors, llm, max_steps=None):
     """Returns (decision_dict, passages, cases, trace). Raises on model/transport errors (the caller falls back)."""
     from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
@@ -61,13 +57,12 @@ def investigate(store, inv, ck, vendors, llm, max_steps=None):
         if name == "get_checks": return ck
         if name == "lookup_vendor":
             v = vendors.get(inv["vendor"]); return v or {"known_vendor": False}
-        if name == "lookup_salesforce_vendor" and SF_LOOKUP: return SF_LOOKUP(inv["vendor"]) or {"found": None}
         if name == "search_policies": return hits(DOCS, q, 3, {"doc_type": "policy"}, "agent: " + q[:40])
         if name == "search_contract": return hits(DOCS, q, 4, {"doc_type": "contract", "vendor": inv["vendor"]}, "agent: " + q[:40])
         if name == "search_past_cases": return hits(CASES, q, 3, {"vendor": inv["vendor"]}, "")
         if name == "compare_to_purchase_order": return comparison_note(ck, passages, cases)
         return f"unknown tool {name}"
-    bound = llm.bind_tools(TOOLS + ([SF_TOOL] if SF_LOOKUP else []))
+    bound = llm.bind_tools(TOOLS)
     msgs = [SystemMessage(AGENT_SYSTEM), HumanMessage("INVOICE:\n" + json.dumps(inv))]
     nudged = False
     for step in range(max_steps or MAX_STEPS):

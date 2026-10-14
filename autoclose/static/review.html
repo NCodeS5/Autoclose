@@ -62,7 +62,7 @@ a{text-decoration:none}a:hover .pill{filter:brightness(.95);text-decoration:unde
 <div class="tiles" id="tiles"></div>
 
 <div class="card"><div class="row sp"><div><h2>1. Invoices</h2><p class="hint" style="margin:0">Run one to watch the agent work, or run all 28.</p></div>
-<div class="row"><button class="btn" onclick="runAll()">Run all</button><button class="btn ghost" onclick="resetAll()">Reset</button><button class="btn ghost" id="sfseed" style="display:none" onclick="seedSf()">Create vendors in Salesforce</button></div></div>
+<div class="row"><button class="btn" onclick="runAll()">Run all</button><button class="btn ghost" onclick="resetAll()">Reset</button></div></div>
 <div class="scroll" style="margin-top:10px"><table id="cases"></table></div></div>
 
 <div class="card"><h2>2. Needs your review <span id="qcount" class="pill p-warn">0</span></h2>
@@ -101,7 +101,7 @@ async function refresh(){
   CASES=cs;
   const busy=m.running>0; document.querySelectorAll("button").forEach(b=>{if(b.dataset.keep!=="1")b.disabled=false});
   clearTimeout(timer); if(busy)timer=setTimeout(()=>refresh().catch(()=>{}),800);
-  $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut","Build: "+m.build+(m.features&&m.features.includes("conflict-check")?" · latest":""))+(m.salesforce?pill("acc","Salesforce: connected"):"")+(function(){const b=$("sfseed");if(b)b.style.display=m.salesforce?"":"none";return""})()+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
+  $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut","Build: "+m.build+(m.features&&m.features.includes("conflict-check")?" · latest":""))+(m.salesforce?pill("acc","Salesforce: connected"):"")+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
   const t=[["Invoices run",m.runs+(m.running?" ("+m.running+" running)":"")],["Handled by agent",m.auto],["Reviewed by person",m.reviewed],["Waiting now",m.waiting],["Guard stepped in",m.guard_overrides],["Learned from reviews",m.learned]];
   $("tiles").innerHTML=t.map(x=>'<div class="tile"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join("");
   const ran=new Set(h.map(x=>x.case_id.replace(/-r\d+$/,"")));
@@ -119,7 +119,7 @@ function evidence(h){
   return ps.map(p=>'<div class="pas '+(cited.has(p.id)?'cited':'')+'"><span class="id">'+esc(p.id)+'</span> '+esc(p.text)+'</div>').join("")||'<div class="empty">Nothing retrieved.</div>';}
 function facts(h){const i=h.invoice,c=h.checks||{};
   return '<div><b>'+esc(i.vendor)+'</b> · '+esc(i.invoice_no)+' · '+money(i.amount)+(i.po_amount!=null?' vs PO '+money(i.po_amount):' (no PO)')+'</div><div class="hint">'+esc(i.description)+'</div>'+
-  '<div class="row" style="margin-top:4px">'+(c.variance_pct!=null?pill("mut","variance "+c.variance_pct+"%"):"")+(c.duplicate_of?pill("bad","duplicate of "+c.duplicate_of):"")+(!c.known_vendor?pill("bad","unknown vendor"):"")+sfv(h)+(c.category_mismatch?pill("warn","category mismatch"):"")+(c.late_fee?pill("warn","late fee"):"")+(c.ytd_billed!=null?pill("mut","billed this year "+money(c.ytd_billed)):"")+'</div>';}
+  '<div class="row" style="margin-top:4px">'+(c.variance_pct!=null?pill("mut","variance "+c.variance_pct+"%"):"")+(c.duplicate_of?pill("bad","duplicate of "+c.duplicate_of):"")+(!c.known_vendor?pill("bad","unknown vendor"):"")+(c.category_mismatch?pill("warn","category mismatch"):"")+(c.late_fee?pill("warn","late fee"):"")+(c.ytd_billed!=null?pill("mut","billed this year "+money(c.ytd_billed)):"")+'</div>';}
 function card(h){
   const g=(h.guard_notes||[]).map(n=>'<div class="hint" style="color:var(--bad)">Guard: '+esc(n)+'</div>').join("");
   return '<div class="case"><div class="row">'+pill("warn",EDGE[h.edge]||"Audit sample")+' <b>'+h.case_id+'</b>'+sfl(h)+'</div><div style="margin:8px 0">'+facts(h)+mem(h)+'</div>'+
@@ -134,8 +134,6 @@ async function detail(id){
    '<div class="grid2"><div class="box"><h3>Decision</h3><div>'+esc(x.rationale||"")+'</div><div class="hint">Confidence '+(x.confidence!=null?x.confidence:"–")+' · Model: '+esc(x.provider)+'</div>'+'</div><div class="box"><h3>Evidence</h3><div class="scroll" style="max-height:200px">'+evidence(x)+'</div></div></div>'+
    steps(x)+'<div class="box" style="margin-top:12px"><h3>Audit trail</h3>'+a.map(e=>'<div class="pas"><b>'+esc(e.step)+'</b> <span class="mono">'+esc(JSON.stringify(e.detail).slice(0,220))+'</span></div>').join("")+'</div></div>';
   $("detail").scrollIntoView({behavior:"smooth"});}
-function sfv(h){const v=h.sf_vendor;if(!v)return'';if(v.found)return' <a href="'+v.url+'" target="_blank">'+pill('acc','Salesforce account: '+esc(v.owner||'found'))+'</a>';return v.found===false?' '+pill('warn','not in Salesforce'):''}
-async function seedSf(){try{const r=await api("/review/salesforce/seed-vendors",{});alert("Salesforce vendors. Created: "+r.created.length+", already there: "+r.existing.length+(r.errors.length?", errors: "+r.errors[0]:""))}catch(e){alert(e.message)}}
 function sfl(h){const s=h.salesforce;if(!s)return'';if(s.error)return' '+pill('bad','Salesforce error');return' <a href="'+s.url+'" target="_blank">'+pill('acc','Salesforce Case '+(s.number||'')+(s.status==='Closed'?' · closed':''))+'</a>'}
 async function runOne(id){try{await api("/review/run?wait=false",{case_id:id});await refresh()}catch(e){alert(e.message)}}
 async function runAll(){try{await api("/review/run-all?wait=false",{});await refresh()}catch(e){alert(e.message)}}

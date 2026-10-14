@@ -21,8 +21,6 @@ class ReviewService:
         self.agent_mode = os.getenv("AGENT_MODE", "workflow").lower() if self.llm is not None else "workflow"
         self.lock = threading.RLock()
         self.sf = SalesforceCases()
-        from . import agent as _agent
-        _agent.SF_LOOKUP = self.sf.find_vendor if self.sf.enabled else None
         self.pool = ThreadPoolExecutor(max_workers=int(os.getenv("AUTOCLOSE_WORKERS", "4")))
         self.gen = 0
         self.kb = ingest(self.store)
@@ -64,16 +62,13 @@ class ReviewService:
             r = self.flow.invoke({"invoice": inv}, cfg); ms = round((time.time() - t) * 1000)
             paused = "__interrupt__" in r
             view = self._view(inv["id"])
-            sf, vend = None, None
-            if self.sf.enabled:
-                vend = self.sf.find_vendor(inv["vendor"]); self.audit.log(inv["id"], "salesforce_vendor", vend)
+            sf = None
             if paused and self.sf.enabled:
-                sf = self.sf.open_case({**row, **view, "sf_vendor": vend})
+                sf = self.sf.open_case({**row, **view})
                 self.audit.log(inv["id"], "salesforce_case", sf)
             with self.lock:
                 row.update(view); row.update(status="needs_review" if paused else "completed", ms=ms)
                 if sf: row["salesforce"] = sf
-                if vend is not None: row["sf_vendor"] = vend
                 if paused: row["memory_notes"] = self._notes(view.get("similar_cases"))
                 if paused and gen == self.gen: self.pending[inv["id"]] = row
         except Exception as e:
@@ -87,8 +82,6 @@ class ReviewService:
         row = self._alloc(case_id, invoice); gen = self.gen
         self.pool.submit(self._execute, row, gen)
         return row
-    def seed_sf_vendors(self):
-        return self.sf.seed_vendors(self.vendors)
     def _sf_close(self, row, resolution, note, who):
         """Close the row's Salesforce Case (if any) and record it. Never raises."""
         sf = row.get("salesforce")
