@@ -126,13 +126,13 @@
   "description": "Finance systems consulting, 20 hours",
   "doc_type": "invoice",
   "expected": {
-   "decision": "approve",
-   "edge": null,
+   "decision": "escalate",
+   "edge": "E1",
    "cites": [
     "P-1",
     "BW-2"
    ],
-   "reviewer": null
+   "reviewer": "approve"
   }
  },
  {

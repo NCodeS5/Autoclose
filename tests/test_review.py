@@ -262,11 +262,13 @@ def test_human_only_vendor_is_sent_to_a_person_even_when_clean(monkeypatch):
     from autoclose.review.service import ReviewService
     monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
     monkeypatch.delenv("HUMAN_ONLY_VENDORS", raising=False)
-    assert ReviewService(llm=None).run("C07")["status"] == "completed"       # Brightwell is normally automatic
-    monkeypatch.setenv("HUMAN_ONLY_VENDORS", "brightwell consulting")
-    s = ReviewService(llm=None); row = s.run("C07")
+    s = ReviewService(llm=None); row = s.run("C07")               # Brightwell is human-only by default (vendor master), no setting needed
     assert row["status"] == "needs_review" and row["edge"] == "E1" and row["checks"]["human_only"] is True
     assert s.metrics()["human_only"] == ["Brightwell Consulting"]
+    assert s.run("C06")["status"] == "completed"                  # other vendors are unaffected
+    monkeypatch.setenv("HUMAN_ONLY_VENDORS", "cloudnimbus")       # the setting adds more vendors
+    s2 = ReviewService(llm=None)
+    assert s2.run("C06")["status"] == "needs_review" and s2.metrics()["human_only"] == ["Brightwell Consulting", "CloudNimbus"]
 
 
 def test_linked_sweeps_never_touch_human_only_vendor(monkeypatch):

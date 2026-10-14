@@ -108,12 +108,13 @@ const recheck=h=>{const x=h.recheck;if(!x)return"";if(x.message)return '<div cla
   return '<div class="hint" style="margin-top:6px"><b>Re-checked after '+esc(x.against)+' was approved, still needs a person:</b> '+esc(bits.join(" · "))+(x.rationale?'<br>'+esc(x.rationale):"")+'</div>';};
 const cites=(h)=>(h.citations||[]).map(c=>'<span class="id">'+esc(c)+'</span>').join(", ")||"—";
 let CASES=[];
-let timer=null;
+let timer=null, HOT=0;
+const heat=()=>{HOT=Date.now()+60000};
 async function refresh(){
   const [m,q,h,cs]=await Promise.all([api("/review/metrics"),api("/review/queue"),api("/review/history"),api("/review/cases")]);
   CASES=cs;
   const busy=m.running>0; document.querySelectorAll("button").forEach(b=>{if(b.dataset.keep!=="1")b.disabled=false});
-  clearTimeout(timer); if(busy)timer=setTimeout(()=>refresh().catch(()=>{}),800);
+  clearTimeout(timer); if(busy||Date.now()<HOT)timer=setTimeout(()=>refresh().catch(()=>{}),800);
   $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut","Build: "+m.build+(m.features&&m.features.includes("conflict-check")?" · latest":""))+(m.salesforce?pill("acc","Salesforce: connected"):"")+(m.human_only&&m.human_only.length?pill("warn","Human-only: "+m.human_only.join(", ")):"")+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
   const t=[["Invoices run",m.runs+(m.running?" ("+m.running+" running)":"")],["Handled by agent",m.auto],["Reviewed by person",m.reviewed],["Waiting now",m.waiting],["Guard stepped in",m.guard_overrides+" of "+m.guard_checked],["Learned from reviews",m.learned]];
   $("tiles").innerHTML=t.map(x=>'<div class="tile"'+(x[0]==="Guard stepped in"?' title="Counts the times code changed or held what the model proposed. Zero means the model already followed every rule."':'')+'><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join("");
@@ -121,9 +122,13 @@ async function refresh(){
   $("cases").innerHTML='<tr><th>ID</th><th>Vendor</th><th>Description</th><th>Amount</th><th></th></tr>'+cs.map(c=>
     '<tr><td>'+c.id+'</td><td>'+esc(c.vendor)+'</td><td>'+esc(c.description)+'</td><td>'+money(c.amount)+'</td><td><button class="btn sm '+(ran.has(c.id)?'ghost':'')+'" onclick="runOne(\''+c.id+'\')">'+(ran.has(c.id)?'Run again':'Run')+'</button></td></tr>').join("");
   $("qcount").textContent=q.length;
+  const ae=document.activeElement; if(ae&&ae.tagName==="INPUT"&&ae.closest("#queue")){ renderHist(h); return; }   // do not steal focus while a note is being typed
   const typed={};document.querySelectorAll("#queue input[type=text]").forEach(x=>{if(x.value)typed[x.id]=x.value});
   $("queue").innerHTML=q.length?q.map(card).join(""):'<div class="empty">Nothing waiting. Run an invoice above, for example C16 (credit memo) or C19 (unknown vendor).</div>';
   Object.keys(typed).forEach(k=>{const x=$(k);if(x)x.value=typed[k]});
+  renderHist(h);
+}
+function renderHist(h){
   $("hist").innerHTML=h.length?'<tr><th>Case</th><th>Vendor</th><th>Amount</th><th>Agent decision</th><th>Edge case</th><th>Outcome</th><th>Cited</th></tr>'+h.map(x=>
     '<tr class="click" onclick="detail(\''+x.case_id+'\')"><td>'+x.case_id+'</td><td>'+esc(x.vendor)+'</td><td>'+money(x.amount)+'</td><td>'+esc(x.proposed||x.decision)+(x.guard_notes&&x.guard_notes.length?' '+pill("bad","guard"):'')+'</td><td>'+(x.edge?pill("warn",EDGE[x.edge]||x.edge):(x.decision==="recode"&&(x.reviewer||x.status==="needs_review")?pill("warn","Category check"):""))+'</td><td>'+outcome(x)+'</td><td>'+cites(x)+'</td></tr>').join(""):'<tr><td class="empty">No results yet.</td></tr>';
 }
@@ -157,9 +162,9 @@ async function detail(id){
    steps(x)+'<div class="box" style="margin-top:12px"><h3>Audit trail</h3>'+a.map(e=>'<div class="pas"><b>'+esc(e.step)+'</b> <span class="mono">'+esc(JSON.stringify(e.detail).slice(0,220))+'</span></div>').join("")+'</div></div>';
   $("detail").scrollIntoView({behavior:"smooth"});}
 function sfl(h){const s=h.salesforce;if(!s)return'';if(s.error)return' '+pill('bad','Salesforce error');return' <a href="'+s.url+'" target="_blank">'+pill('acc','Salesforce Case '+(s.number||'')+(s.status==='Closed'?' · closed':''))+'</a>'}
-async function runOne(id){try{await api("/review/run?wait=false",{case_id:id});await refresh()}catch(e){alert(e.message)}}
-async function runAll(){try{await api("/review/run-all?wait=false",{});await refresh()}catch(e){alert(e.message)}}
+async function runOne(id){try{heat();await api("/review/run?wait=false",{case_id:id});await refresh()}catch(e){alert(e.message)}}
+async function runAll(){try{heat();await api("/review/run-all?wait=false",{});await refresh()}catch(e){alert(e.message)}}
 async function resetAll(){await api("/review/reset",{});$("detail").innerHTML="";await refresh()}
-async function decide(id,r){try{await api("/review/decision/"+id+"?wait=false",{resolution:r,note:($("n-"+id)||{}).value||""});await refresh()}catch(e){alert(e.message)}}
+async function decide(id,r){try{heat();await api("/review/decision/"+id+"?wait=false",{resolution:r,note:($("n-"+id)||{}).value||""});await refresh()}catch(e){alert(e.message)}}
 refresh();
 </script></body></html>

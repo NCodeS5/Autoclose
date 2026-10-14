@@ -65,6 +65,8 @@ def offline_reason(inv, ck, passages, cases) -> dict:
     contract = next((p for p in passages if p["meta"].get("doc_type") == "contract"), None)
     cites = [pt["id"]] + ([contract["id"]] if contract else [])
     if abs(var) <= tol:
+        if ck.get("human_only"):
+            return out("escalate", "E1", 0.95, cites, f'{inv["vendor"]} is a human-only vendor, so only a person can approve or reject its invoices.')
         return out("approve", None, 0.93, cites, f"Invoice is {var:+.2f}% from the purchase order, inside the {mt.group(1)}% tolerance.")
     po_, mo = _find(passages, r"up to (\d+(?:\.\d+)?)% above the purchase order")
     lim = _num(mo.group(1)) if mo else 10.0
@@ -89,6 +91,7 @@ SYSTEM = """You are an accounts payable review agent. Decide using ONLY the poli
 Rules: never approve write-offs, credit memos, unknown vendors, duplicates, or totals the policy says need higher approval.
 If the evidence does not let you decide, escalate with edge E2 and low confidence. Cite only passage or case ids you were given.
 Edge codes: E1 = policy names an approver for a routine case (credit memo, write-off, overage in the AP Manager's band, total above the materiality threshold, contract cap exceeded, unsupported late fee). E2 = unexplained or unclear (overage above the Controller limit, no purchase order, conflicting evidence, low confidence). E3 = novel (unknown vendor).
+If the checks say human_only is true, escalate with edge E1: only a person may approve or reject that vendor.
 Take every number from the invoice, the checks or the passages. Do not quote numbers that are not in them.
 A similar past case that a person approved, for the same vendor and the same cause, may be followed even if the percentage differs.
 A past case about recoding a category says nothing about price variances: ignore it when judging an overage.

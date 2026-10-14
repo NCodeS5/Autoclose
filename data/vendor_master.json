@@ -1,5 +1,5 @@
 [
- {"vendor":"Brightwell Consulting","category":"Professional Services","usage_based":false},
+ {"vendor":"Brightwell Consulting","category":"Professional Services","usage_based":false,"human_only":true},
  {"vendor":"CloudNimbus","category":"Cloud Hosting","usage_based":true},
  {"vendor":"OfficeCo Supplies","category":"Office Supplies","usage_based":false},
  {"vendor":"SwiftFreight Logistics","category":"Freight","usage_based":false},
