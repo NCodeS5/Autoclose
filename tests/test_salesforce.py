@@ -46,3 +46,32 @@ def test_disabled_without_settings(monkeypatch):
     assert s.metrics()["salesforce"] is False
     assert "salesforce" not in s.run("C16") or s.run("C16").get("salesforce") is None
 
+
+class FakeCustom(Fake):
+    """Org where custom fields exist (or not, when strict=True is flipped by the test)."""
+    def __init__(self, reject_custom=False): super().__init__(); self.reject = reject_custom
+    def request(self, method, url, **kw):
+        body = kw.get("json") or {}
+        if self.reject and any(k.endswith("__c") for k in body): raise RuntimeError("No such column")
+        return super().request(method, url, **kw)
+
+def test_custom_fields_filled_and_final_decision_set(monkeypatch):
+    monkeypatch.setenv("SF_CUSTOM_FIELDS", "true"); f = FakeCustom(); s = svc(monkeypatch, f)
+    row = s.run("C16"); assert row["salesforce"]["custom_fields"] is True
+    posted = [c[2] for c in f.calls if c[0] == "POST" and c[1].endswith("/sobjects/Case")][0]
+    assert posted["Autoclose_Review_Id__c"] == "C16" and posted["Agent_Edge__c"] and "Agent_Confidence__c" in posted
+    s.decide("C16", "issue", "no")
+    patch = [c[2] for c in f.calls if c[0] == "PATCH"][0]
+    assert patch == {"Status": "Closed", "Final_Decision__c": "Rejected"}
+
+def test_missing_custom_fields_never_lose_the_case(monkeypatch):
+    monkeypatch.setenv("SF_CUSTOM_FIELDS", "true"); f = FakeCustom(reject_custom=True); s = svc(monkeypatch, f)
+    row = s.run("C16")
+    assert row["salesforce"]["number"] == "00001" and row["salesforce"]["custom_fields"] is False
+    assert s.decide("C16", "benign", "ok")["salesforce"]["status"] == "Closed"
+
+def test_custom_fields_off_by_default(monkeypatch):
+    monkeypatch.delenv("SF_CUSTOM_FIELDS", raising=False); f = FakeCustom(); s = svc(monkeypatch, f)
+    s.run("C16")
+    posted = [c[2] for c in f.calls if c[0] == "POST" and c[1].endswith("/sobjects/Case")][0]
+    assert not any(k.endswith("__c") for k in posted)

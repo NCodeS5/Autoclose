@@ -14,6 +14,8 @@ class SalesforceCases:
         self.cid = client_id or os.getenv("SF_CLIENT_ID", "")
         self.secret = client_secret or os.getenv("SF_CLIENT_SECRET", "")
         self.enabled = bool(self.domain and self.cid and self.secret)
+        # Optional custom fields on Case (you create them in Setup; see README). Off unless SF_CUSTOM_FIELDS=true.
+        self.custom = os.getenv("SF_CUSTOM_FIELDS", "").strip().lower() in ("1", "true", "yes")
         self._tok, self._exp, self._lock = None, 0, threading.Lock()
     def _token(self):
         with self._lock:
@@ -36,13 +38,24 @@ class SalesforceCases:
             desc = (f"Invoice {inv.get('invoice_no')} from {inv.get('vendor')} for ${amt:,.2f}\n{inv.get('description', '')}\n\n"
                     f"Agent proposed: {row.get('proposed') or row.get('decision')} (edge {row.get('edge')}, confidence {row.get('confidence')})\n"
                     f"Rationale: {row.get('rationale')}\nCited: {', '.join(row.get('citations') or [])}\nReview id: {row['case_id']}")
-            out = self._call("POST", "/sobjects/Case", json={
-                "Subject": f"Invoice review {row['case_id']}: {inv.get('vendor')} ${amt:,.0f} ({row.get('edge') or 'audit sample'})",
-                "Description": desc[:30000], "Origin": "Web", "Priority": "High" if row.get("edge") == "E1" else "Medium", "Status": "New"})
+            body = {
+                "Subject": f"Invoice review {row['case_id']}: {inv.get('vendor')} ${amt:,.2f} ({row.get('edge') or 'audit sample'})",
+                "Description": desc[:30000], "Origin": "Web", "Priority": "High" if row.get("edge") == "E1" else "Medium", "Status": "New"}
+            used_custom = False
+            if self.custom:
+                extra = {"Autoclose_Review_Id__c": str(row["case_id"]), "Agent_Edge__c": str(row.get("edge") or "audit sample"),
+                         "Agent_Confidence__c": float(row.get("confidence") or 0),
+                         "Agent_Proposal__c": str(row.get("proposed") or row.get("decision") or "")[:40]}
+                try:
+                    out = self._call("POST", "/sobjects/Case", json={**body, **extra}); used_custom = True
+                except Exception:
+                    out = self._call("POST", "/sobjects/Case", json=body)       # a missing field never loses the Case
+            else:
+                out = self._call("POST", "/sobjects/Case", json=body)
             cid = out["id"]
             num = self._call("GET", f"/sobjects/Case/{cid}?fields=CaseNumber").get("CaseNumber")
             host = self.domain.replace(".my.salesforce.com", ".lightning.force.com")
-            return {"id": cid, "number": num, "url": f"{host}/lightning/r/Case/{cid}/view", "status": "New"}
+            return {"id": cid, "number": num, "url": f"{host}/lightning/r/Case/{cid}/view", "status": "New", "custom_fields": used_custom}
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"[:200]}
     def close_case(self, sf, resolution, note="", who="reviewer"):
@@ -50,7 +63,11 @@ class SalesforceCases:
         if not self.enabled or not sf or not sf.get("id"): return sf
         try:
             word = "Approved" if resolution == "benign" else "Rejected"
-            self._call("PATCH", f"/sobjects/Case/{sf['id']}", json={"Status": "Closed"})
+            if sf.get("custom_fields"):
+                try: self._call("PATCH", f"/sobjects/Case/{sf['id']}", json={"Status": "Closed", "Final_Decision__c": word})
+                except Exception: self._call("PATCH", f"/sobjects/Case/{sf['id']}", json={"Status": "Closed"})
+            else:
+                self._call("PATCH", f"/sobjects/Case/{sf['id']}", json={"Status": "Closed"})
             self._call("POST", "/sobjects/CaseComment", json={"ParentId": sf["id"], "CommentBody": f"{word} by {who}. {note}".strip()})
             return {**sf, "status": "Closed", "resolution": word}
         except Exception as e:

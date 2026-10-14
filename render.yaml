@@ -36,3 +36,5 @@ services:
         sync: false
       - key: SF_CLIENT_SECRET
         sync: false
+      - key: SF_CUSTOM_FIELDS
+        sync: false
