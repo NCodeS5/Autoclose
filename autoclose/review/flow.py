@@ -25,6 +25,7 @@ class S(TypedDict, total=False):
     final: str            # approved | voided | recoded | held
     proposed_action: Optional[dict]
     steps: int
+    learned_id: Optional[str]     # set when this decision was saved to memory
     trace: list
 
 def build_flow(store, vendors, prior, audit, llm=None, audit_rate=0.0, seed=1, agent_mode="workflow"):
@@ -88,6 +89,7 @@ def build_flow(store, vendors, prior, audit, llm=None, audit_rate=0.0, seed=1, a
             chunk = Chunk(f'CASE-{inv["id"]}', text, {"vendor": inv["vendor"], "outcome": outcome, "title": inv["id"]})
             t = time.time(); store.upsert(CASES, [chunk]); visible = store.wait_visible(CASES, chunk)
             log(s, "feedback", {"saved": chunk.id, "searchable": visible, "ms": round((time.time() - t) * 1000)})
+            return {"learned_id": chunk.id}
         return {}
     g = StateGraph(S)
     for n, f in [("checks", n_checks), ("agent", n_agent), ("retrieve", n_retrieve), ("reason", n_reason), ("guard", n_guard),

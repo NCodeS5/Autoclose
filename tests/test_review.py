@@ -234,3 +234,15 @@ def test_rejection_does_not_hold_when_history_conflicts(monkeypatch):
     s.decide("C13", "issue", "no")
     row = next(h for h in s.history if h["case_id"] == "C13b")
     assert row["status"] == "needs_review" and "Conflicting history" in row["recheck"]["message"]
+
+
+def test_linked_approval_does_not_depend_on_the_store_count(monkeypatch):
+    """Pinecone's record count lags and re-approving the same case id does not change it. The sweep must still run."""
+    from autoclose.review.service import ReviewService
+    monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
+    s = ReviewService(llm=None)
+    monkeypatch.setattr(s.store, "count", lambda ns: 5)          # a count that never moves
+    s.run("C22"); s.run("C23")
+    s.decide("C22", "benign", "ok")
+    row = next(h for h in s.history if h["case_id"] == "C23")
+    assert row["status"] == "completed" and row["linked_to"] == "C22"

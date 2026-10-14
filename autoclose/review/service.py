@@ -103,7 +103,7 @@ class ReviewService:
                 "decision": d.get("decision"), "proposed": d.get("proposed"), "edge": d.get("edge"),
                 "confidence": d.get("confidence"), "rationale": d.get("rationale"), "citations": d.get("citations"),
                 "guard_notes": d.get("guard_notes"), "provider": d.get("provider"),
-                "trace": v.get("trace"), "final": v.get("final"), "action": v.get("proposed_action"), "route": v.get("route")}
+                "trace": v.get("trace"), "learned_id": v.get("learned_id"), "final": v.get("final"), "action": v.get("proposed_action"), "route": v.get("route")}
     def _begin_decide(self, cid):
         with self.lock:
             if cid not in self.pending: raise KeyError(cid)
@@ -116,11 +116,11 @@ class ReviewService:
             view = self._view(cid)
             with self.lock:
                 row.update(view); row.update(status="completed", reviewer=resolution, note=note,
-                                             learned=self.store.count(CASES) > before)
+                                             learned=bool(view.get("learned_id")) or self.store.count(CASES) > before)
             self._sf_close(row, resolution, note, "reviewer")
             if row.get("learned"):
                 try: self._sweep(cid) if resolution == "benign" else self._sweep_reject(cid)
-                except Exception: pass
+                except Exception as e: self.audit.log(cid, "linked_sweep_error", {"error": f"{type(e).__name__}: {e}"[:300]})
         except Exception as e:
             with self.lock: row.update(status="failed", rationale=f"Finalizing failed: {str(e)[:300]}")
         return row
