@@ -55,11 +55,11 @@ def test_async_run_completes_and_audit_consistent():
     auth = {}
     c.post("/review/reset")
     ids = c.post("/review/run-all?wait=false").json()
-    assert len(ids) == 28
+    assert len(ids) == 31
     for _ in range(300):
         m = c.get("/review/metrics").json()
         if m["running"] == 0: break
         time.sleep(0.2)
-    assert m["running"] == 0 and m["runs"] == 28
+    assert m["running"] == 0 and m["runs"] == 31
     assert all(h["status"] in ("completed", "needs_review") for h in c.get("/review/history").json())
     assert len(c.get("/review/audit/C01").json()) > 0

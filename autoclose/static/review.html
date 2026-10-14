@@ -72,7 +72,7 @@ details[open]>summary .chev{transform:rotate(45deg)}
 <div class="row" id="status"></div>
 <div class="tiles" id="tiles"></div>
 
-<div class="card"><div class="row sp"><div><h2>1. Invoices</h2><p class="hint" style="margin:0">Run one to watch the agent work, or run all 28.</p></div>
+<div class="card"><div class="row sp"><div><h2>1. Invoices</h2><p class="hint" style="margin:0">Run one to watch the agent work, or run them all.</p></div>
 <div class="row"><button class="btn" onclick="runAll()">Run all</button><button class="btn ghost" onclick="resetAll()">Reset</button></div></div>
 <div class="scroll" style="margin-top:10px"><table id="cases"></table></div></div>
 
@@ -95,8 +95,10 @@ function outcome(h){
   if(h.status==="finishing")return pill("acc","Finishing…");
   if(h.status==="failed")return pill("bad","Failed");
   if(h.status==="needs_review")return pill("warn","Waiting for a person");
-  const f=h.final, by=h.linked_to?" · auto-resolved from "+h.linked_to:h.reviewer?(h.reviewer==="issue"?" · person rejected":" · person approved"):" · by agent";
-  const c=f==="held"?"bad":"ok", t={approved:"Approved",voided:"Void proposed",recoded:"Recode proposed",held:"Held"}[f]||f;
+  const f=h.final, rc=f==="recoded";
+  const by=h.linked_to?" · auto-resolved from "+h.linked_to:h.reviewer?(h.reviewer==="issue"?(rc||h.decision==="recode"?" · person kept the old category":" · person rejected"):(rc?" · category accepted by person":" · person approved")):(rc?" · by agent, from an accepted recode":" · by agent");
+  const to=h.action&&h.action.to?h.action.to:"";
+  const c=f==="held"?"bad":f==="voided"?"bad":f==="recoded"?"warn":"ok", t={approved:"Approved",voided:"Voided (duplicate)",recoded:"Recoded"+(to?" to "+to:""),held:"Held"}[f]||f;
   return pill(c,t)+'<span class="hint"> '+esc(by)+'</span>';}
 const steps=h=>{const t=h.trace||[];if(!t.length)return"";
   return '<div class="box" style="margin-top:12px"><h3>Agent steps (chosen by the model)</h3>'+t.map(x=>'<div class="pas"><b>'+x.step+'. '+esc(x.tool)+'</b> <span class="mono">'+esc(x.args&&x.args.query?x.args.query:(x.args&&x.args.decision?x.args.decision+" · edge "+x.args.edge+" · conf "+x.args.confidence:""))+'</span>'+(x.found?' <span class="hint">→ '+esc(x.found.join(", ")||"nothing")+'</span>':"")+'</div>').join("")+'</div>';};
@@ -113,8 +115,8 @@ async function refresh(){
   const busy=m.running>0; document.querySelectorAll("button").forEach(b=>{if(b.dataset.keep!=="1")b.disabled=false});
   clearTimeout(timer); if(busy)timer=setTimeout(()=>refresh().catch(()=>{}),800);
   $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut","Build: "+m.build+(m.features&&m.features.includes("conflict-check")?" · latest":""))+(m.salesforce?pill("acc","Salesforce: connected"):"")+(m.human_only&&m.human_only.length?pill("warn","Human-only: "+m.human_only.join(", ")):"")+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
-  const t=[["Invoices run",m.runs+(m.running?" ("+m.running+" running)":"")],["Handled by agent",m.auto],["Reviewed by person",m.reviewed],["Waiting now",m.waiting],["Guard stepped in",m.guard_overrides],["Learned from reviews",m.learned]];
-  $("tiles").innerHTML=t.map(x=>'<div class="tile"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join("");
+  const t=[["Invoices run",m.runs+(m.running?" ("+m.running+" running)":"")],["Handled by agent",m.auto],["Reviewed by person",m.reviewed],["Waiting now",m.waiting],["Guard stepped in",m.guard_overrides+" of "+m.guard_checked],["Learned from reviews",m.learned]];
+  $("tiles").innerHTML=t.map(x=>'<div class="tile"'+(x[0]==="Guard stepped in"?' title="Counts the times code changed or held what the model proposed. Zero means the model already followed every rule."':'')+'><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join("");
   const ran=new Set(h.map(x=>x.case_id.replace(/-r\d+$/,"")));
   $("cases").innerHTML='<tr><th>ID</th><th>Vendor</th><th>Description</th><th>Amount</th><th></th></tr>'+cs.map(c=>
     '<tr><td>'+c.id+'</td><td>'+esc(c.vendor)+'</td><td>'+esc(c.description)+'</td><td>'+money(c.amount)+'</td><td><button class="btn sm '+(ran.has(c.id)?'ghost':'')+'" onclick="runOne(\''+c.id+'\')">'+(ran.has(c.id)?'Run again':'Run')+'</button></td></tr>').join("");
@@ -123,7 +125,7 @@ async function refresh(){
   $("queue").innerHTML=q.length?q.map(card).join(""):'<div class="empty">Nothing waiting. Run an invoice above, for example C16 (credit memo) or C19 (unknown vendor).</div>';
   Object.keys(typed).forEach(k=>{const x=$(k);if(x)x.value=typed[k]});
   $("hist").innerHTML=h.length?'<tr><th>Case</th><th>Vendor</th><th>Amount</th><th>Agent decision</th><th>Edge case</th><th>Outcome</th><th>Cited</th></tr>'+h.map(x=>
-    '<tr class="click" onclick="detail(\''+x.case_id+'\')"><td>'+x.case_id+'</td><td>'+esc(x.vendor)+'</td><td>'+money(x.amount)+'</td><td>'+esc(x.proposed||x.decision)+(x.guard_notes&&x.guard_notes.length?' '+pill("bad","guard"):'')+'</td><td>'+(x.edge?pill("warn",EDGE[x.edge]||x.edge):"")+'</td><td>'+outcome(x)+'</td><td>'+cites(x)+'</td></tr>').join(""):'<tr><td class="empty">No results yet.</td></tr>';
+    '<tr class="click" onclick="detail(\''+x.case_id+'\')"><td>'+x.case_id+'</td><td>'+esc(x.vendor)+'</td><td>'+money(x.amount)+'</td><td>'+esc(x.proposed||x.decision)+(x.guard_notes&&x.guard_notes.length?' '+pill("bad","guard"):'')+'</td><td>'+(x.edge?pill("warn",EDGE[x.edge]||x.edge):(x.decision==="recode"&&(x.reviewer||x.status==="needs_review")?pill("warn","Category check"):""))+'</td><td>'+outcome(x)+'</td><td>'+cites(x)+'</td></tr>').join(""):'<tr><td class="empty">No results yet.</td></tr>';
 }
 function evidence(h){
   const cited=new Set(h.citations||[]);
@@ -135,13 +137,15 @@ function facts(h){const i=h.invoice,c=h.checks||{};
   '<div class="row" style="margin-top:4px">'+(c.variance_pct!=null?pill("mut","variance "+c.variance_pct+"%"):"")+(c.duplicate_of?pill("bad","duplicate of "+c.duplicate_of):"")+(!c.known_vendor?pill("bad","unknown vendor"):"")+(c.category_mismatch?pill("warn","category mismatch"):"")+(c.late_fee?pill("warn","late fee"):"")+(c.human_only?pill("warn","human-only vendor"):"")+(c.ytd_billed!=null?pill("mut","billed this year "+money(c.ytd_billed)):"")+'</div>';}
 function card(h){
   const g=(h.guard_notes||[]).map(n=>'<div class="hint" style="color:var(--bad)">Guard: '+esc(n)+'</div>').join("");
+  const cc=h.decision==="recode"&&h.checks&&h.checks.category_mismatch;
   const i=h.invoice,flags=(h.memory_notes||[]).some(n=>n.outcome==="rejected")?pill("bad","similar case rejected"):((h.memory_notes||[]).some(n=>n.outcome==="approved")?pill("ok","similar case approved"):"");
-  const head='<summary><span class="chev"></span>'+pill("warn",EDGE[h.edge]||"Audit sample")+'<b>'+h.case_id+'</b><span class="sumtxt">'+esc(i.vendor)+' · '+money(i.amount)+'</span>'+flags+(h.guard_notes&&h.guard_notes.length?pill("bad","guard"):"")+sfl(h).replace("<a ",'<a onclick="event.stopPropagation()" ')+'<span class="sumconf">conf '+(h.confidence!=null?h.confidence:"–")+'</span></summary>';
+  const head='<summary><span class="chev"></span>'+pill("warn",EDGE[h.edge]||(h.decision==="recode"?"Category check":"Audit sample"))+'<b>'+h.case_id+'</b><span class="sumtxt">'+esc(i.vendor)+' · '+money(i.amount)+'</span>'+flags+(h.guard_notes&&h.guard_notes.length?pill("bad","guard"):"")+sfl(h).replace("<a ",'<a onclick="event.stopPropagation()" ')+'<span class="sumconf">conf '+(h.confidence!=null?h.confidence:"–")+'</span></summary>';
   return '<details class="case q"'+(OPEN.has(h.case_id)?' open':'')+' ontoggle="tg(\''+h.case_id+'\',this)">'+head+'<div class="qbody"><div style="margin:8px 0">'+facts(h)+mem(h)+'</div>'+
   '<div class="grid2"><div class="box"><h3>Agent says</h3><div>'+esc(h.rationale||"No rationale. The guard stopped this.")+'</div><div class="hint" style="margin-top:6px">Confidence '+(h.confidence!=null?h.confidence:"–")+' · Cites '+cites(h)+'</div>'+g+recheck(h)+'</div>'+
   '<div class="box"><h3>Evidence retrieved</h3><div class="scroll" style="max-height:200px">'+evidence(h)+'</div></div></div>'+
+  (cc?'<div class="box" style="margin-top:10px;border-color:var(--warn)"><b>Accept the new category?</b> The invoice is coded <b>'+esc(i.category)+'</b>, but this vendor\'s default is <b>'+esc(h.checks.vendor_default_category)+'</b>. If you accept, the invoice is recoded and the agent remembers it for the next similar invoice.</div>':'')+
   '<div class="row" style="margin-top:10px"><input type="text" id="n-'+h.case_id+'" placeholder="Optional note">'+
-  '<button class="btn go" onclick="decide(\''+h.case_id+'\',\'benign\')">Approve</button><button class="btn stop" onclick="decide(\''+h.case_id+'\',\'issue\')">Reject</button></div></div></details>';}
+  '<button class="btn go" onclick="decide(\''+h.case_id+'\',\'benign\')">'+(cc?"Accept "+esc(h.checks.vendor_default_category):"Approve")+'</button><button class="btn stop" onclick="decide(\''+h.case_id+'\',\'issue\')">'+(cc?"Keep "+esc(i.category):"Reject")+'</button></div></div></details>';}
 const OPEN=new Set();
 function tg(id,el){if(el.open)OPEN.add(id);else OPEN.delete(id)}
 function openAll(on){document.querySelectorAll("#queue details").forEach(d=>{d.open=on})}

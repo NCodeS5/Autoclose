@@ -3,6 +3,7 @@
 
 LLM_PROVIDER=offline (default, rule reader over the retrieved text, no keys) | anthropic | bedrock."""
 import json, os, re
+from .checks import learned_recode, is_recode_case
 
 CASE_MATCH_MIN = float(os.getenv("CASE_MATCH_MIN", "0.35"))
 
@@ -16,6 +17,7 @@ def _find(passages, pattern):
 
 def offline_reason(inv, ck, passages, cases) -> dict:
     ids = {p["id"] for p in passages}
+    all_cases, cases = cases, [c for c in cases if not is_recode_case(c)]      # variance judgments ignore category-recode memory
     def out(decision, edge, conf, cites, why, new_category=None):
         return {"decision": decision, "edge": edge, "confidence": conf, "citations": cites,
                 "rationale": why, "new_category": new_category}
@@ -45,6 +47,11 @@ def offline_reason(inv, ck, passages, cases) -> dict:
                        "The invoice includes a late fee but the vendor contract has no late-fee clause. The AP Manager must review it.")
     if ck["category_mismatch"]:
         p, _ = _find(passages, r"default category")
+        lc = learned_recode(all_cases, inv, ck)
+        if lc:
+            return out("recode", None, 0.93, [x for x in [p and p["id"], lc["id"]] if x],
+                       f'Coded to {inv["category"]} but the vendor default is {ck["vendor_default_category"]}. A person already approved this same recode ({lc["id"]}), so recode it the same way.',
+                       ck["vendor_default_category"])
         return out("recode", None, 0.93 if p else 0.6, [p["id"]] if p else [],
                    f'Coded to {inv["category"]} but the vendor default is {ck["vendor_default_category"]}. Propose recoding.',
                    ck["vendor_default_category"])
@@ -84,6 +91,8 @@ If the evidence does not let you decide, escalate with edge E2 and low confidenc
 Edge codes: E1 = policy names an approver for a routine case (credit memo, write-off, overage in the AP Manager's band, total above the materiality threshold, contract cap exceeded, unsupported late fee). E2 = unexplained or unclear (overage above the Controller limit, no purchase order, conflicting evidence, low confidence). E3 = novel (unknown vendor).
 Take every number from the invoice, the checks or the passages. Do not quote numbers that are not in them.
 A similar past case that a person approved, for the same vendor and the same cause, may be followed even if the percentage differs.
+A past case about recoding a category says nothing about price variances: ignore it when judging an overage.
+If the category does not match the vendor default, decide recode. Cite the earlier case when a person already approved the same recode.
 Reply with JSON only: {{"decision":"approve|void_duplicate|recode|escalate","edge":"E1|E2|E3|null","confidence":0-1,"citations":["id"],"rationale":"one or two sentences","new_category":null}}"""
 
 def get_llm():
@@ -101,9 +110,10 @@ def get_llm():
             return ChatBedrockConverse(**kw)
     return None
 
-def comparison_note(ck, passages, cases=()) -> str:
+def comparison_note(ck, passages, cases=(), inv=None) -> str:
     """Do the arithmetic in code so the model does not have to: tolerance, overage band, and contract cap."""
     parts = []
+    all_cases, cases = cases, [c for c in cases if not is_recode_case(c)]
     var = ck.get("variance_pct")
     _, m = _find(passages, r"within (\d+(?:\.\d+)?)% of the purchase order")
     _, mo = _find(passages, r"up to (\d+(?:\.\d+)?)% above the purchase order")
@@ -122,6 +132,7 @@ def comparison_note(ck, passages, cases=()) -> str:
         cap = _num(mc.group(1)); ytd = ck["ytd_billed"]
         parts.append(f"Computed by code: billed this contract year including this invoice is ${ytd:,.2f}, which is "
                      f"{'ABOVE' if ytd > cap else 'within'} the ${cap:,.0f} contract cap.")
+    cases = [c for c in cases if not is_recode_case(c)]
     rej = next((c for c in cases if c["outcome"] == "rejected" and c["score"] >= CASE_MATCH_MIN), None)
     if var is not None and abs(var) > 10 and rej:
         parts.append(f'Computed by code: for this same vendor, a person REJECTED the similar earlier case {rej["id"]} '
@@ -134,6 +145,10 @@ def comparison_note(ck, passages, cases=()) -> str:
                              f'(similarity {c["score"]:.2f}). Policy {cite} lets you follow an earlier approved pattern for the same '
                              f'vendor and cause, even if the percentage differs somewhat, so you may approve and cite {c["id"]} and {cite}.')
                 break
+    lc = learned_recode(all_cases, inv, ck) if inv and ck.get("category_mismatch") else None
+    if lc:
+        parts.append(f'Computed by code: a person already approved recoding this vendor from {inv["category"]} to {ck["vendor_default_category"]} in {lc["id"]}. '
+                     f'You may decide recode and cite {lc["id"]} together with the categorization policy.')
     return " ".join(parts) or "No variance comparison is available."
 
 def _invoke_json(chain, vars_):
@@ -147,7 +162,7 @@ def llm_reason(llm, inv, ck, passages, cases) -> dict:
     from langchain_core.prompts import ChatPromptTemplate
     prompt = ChatPromptTemplate.from_messages([("system", SYSTEM), ("human",
         "INVOICE:\n{inv}\n\nCHECKS (computed by code):\n{ck}\n{cmp}\n\nPASSAGES:\n{ps}\n\nSIMILAR PAST CASES:\n{cs}\n\n{reminder}")])
-    vars_ = {"inv": json.dumps(inv), "ck": json.dumps(ck), "cmp": comparison_note(ck, passages, cases),
+    vars_ = {"inv": json.dumps(inv), "ck": json.dumps(ck), "cmp": comparison_note(ck, passages, cases, inv),
              "ps": "\n".join(f'[{p["id"]}] {p["text"]}' for p in passages),
              "cs": "\n".join(f'[{c["id"]}] ({c["outcome"]}) {c["text"]}' for c in cases) or "none", "reminder": ""}
     try:

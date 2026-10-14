@@ -8,7 +8,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt
 from ..rag import CASES, Chunk
-from .checks import run_checks
+from .checks import run_checks, learned_recode
 from .retrieve import retrieve
 from .reasoner import reason
 from .agent import investigate
@@ -28,12 +28,12 @@ class S(TypedDict, total=False):
     learned_id: Optional[str]     # set when this decision was saved to memory
     trace: list
 
-def build_flow(store, vendors, prior, audit, llm=None, audit_rate=0.0, seed=1, agent_mode="workflow"):
+def build_flow(store, vendors, prior, audit, llm=None, audit_rate=0.0, seed=1, agent_mode="workflow", seen=None):
     rng = random.Random(seed)
     def log(state, step, detail): audit.log(state["invoice"]["id"], step, detail)
 
     def n_checks(s):
-        ck = run_checks(s["invoice"], vendors, prior); log(s, "checks", ck); return {"checks": ck, "steps": 1}
+        ck = run_checks(s["invoice"], vendors, prior, seen); log(s, "checks", ck); return {"checks": ck, "steps": 1}
     def n_retrieve(s):
         t = time.time(); ps, cs = retrieve(store, s["invoice"], s["checks"])
         log(s, "retrieve", {"store": store.name, "passages": [p["id"] for p in ps], "cases": [c["id"] for c in cs],
@@ -58,13 +58,14 @@ def build_flow(store, vendors, prior, audit, llm=None, audit_rate=0.0, seed=1, a
             return {"passages": ps, "cases": cs, "decision": d, "trace": []}
     def n_guard(s):
         g = guard(s["decision"], s["invoice"], s["checks"], s["passages"], s["cases"])
-        log(s, "guard", {"final_decision": g["decision"], "edge": g.get("edge"), "notes": g["guard_notes"]})
-        route = "escalate" if g["decision"] == "escalate" else ("audit" if rng.random() < audit_rate else "auto")
+        log(s, "guard", {"final_decision": g["decision"], "edge": g.get("edge"), "category_check": g.get("category_check"), "notes": g["guard_notes"]})
+        route = "escalate" if (g["decision"] == "escalate" or g.get("category_check")) else ("audit" if rng.random() < audit_rate else "auto")
         return {"decision": g, "route": route}
     def n_route(s): return s["route"]
     def n_human(s):
         d = s["decision"]
-        ans = interrupt({"reason": f'{d.get("edge") or "audit"}: {d.get("rationale") or "; ".join(d["guard_notes"])}',
+        label = "category check" if d.get("category_check") else (d.get("edge") or "audit")
+        ans = interrupt({"reason": f'{label}: {d.get("rationale") or "; ".join(d["guard_notes"])}',
                          "proposed": d.get("proposed"), "decision": d})
         log(s, "human", ans); return {"human": ans}
     def n_final(s):
@@ -83,6 +84,13 @@ def build_flow(store, vendors, prior, audit, llm=None, audit_rate=0.0, seed=1, a
     def n_feedback(s):
         """A reviewer-decided unexplained case becomes memory the next similar case can cite (approved or rejected). Cases auto-resolved from another decision are not learned again."""
         h, inv = s.get("human"), s["invoice"]
+        if h and not h.get("linked") and s["decision"].get("category_check") and h["resolution"] == "benign":
+            new = s["checks"]["vendor_default_category"]
+            text = f'{inv["vendor"]} {inv["category"]} {inv["description"]} coded as {inv["category"]} recoded to {new} approved by reviewer'
+            chunk = Chunk(f'CASE-{inv["id"]}', text, {"vendor": inv["vendor"], "outcome": "approved", "title": inv["id"]})
+            t = time.time(); store.upsert(CASES, [chunk]); visible = store.wait_visible(CASES, chunk)
+            log(s, "feedback", {"saved": chunk.id, "kind": "category recode", "searchable": visible, "ms": round((time.time() - t) * 1000)})
+            return {"learned_id": chunk.id}
         if h and not h.get("linked") and s["decision"].get("edge") == "E2":
             word, outcome = ("approved", "approved") if h["resolution"] == "benign" else ("rejected", "rejected")
             text = f'{inv["vendor"]} {inv["category"]} {inv["description"]} {word} by reviewer after variance of {s["checks"]["variance_pct"]} percent'

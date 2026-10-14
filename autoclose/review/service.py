@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 from langgraph.types import Command
 from ..rag import get_store, ingest, CASES
-from .checks import load_vendors, load_prior, human_only_vendors, DATA
+from .checks import load_vendors, load_prior, human_only_vendors, case_base, DATA
 from .audit import AuditLog
 from .flow import build_flow
 from .reasoner import get_llm, CASE_MATCH_MIN
@@ -20,6 +20,7 @@ class ReviewService:
         self.audit = AuditLog()
         self.agent_mode = os.getenv("AGENT_MODE", "workflow").lower() if self.llm is not None else "workflow"
         self.lock = threading.RLock()
+        self.seen, self.seq = [], 0      # invoices received this session, so a second copy is caught as a duplicate
         self.sf = SalesforceCases()
         self.pool = ThreadPoolExecutor(max_workers=int(os.getenv("AUTOCLOSE_WORKERS", "4")))
         self.gen = 0
@@ -33,8 +34,9 @@ class ReviewService:
         self.store.purge_except(CASES, [c.id for c in load_past_cases()])
     def _build(self):
         self.flow = build_flow(self.store, self.vendors, self.prior, self.audit, self.llm,
-                               audit_rate=float(os.getenv("AUDIT_RATE", "0")), agent_mode=self.agent_mode)
+                               audit_rate=float(os.getenv("AUDIT_RATE", "0")), agent_mode=self.agent_mode, seen=self.seen)
         self.pending, self.history, self.runs = {}, [], Counter()
+        self.seen.clear(); self.seq = 0
     def reset(self):
         """Forget decisions and learned cases; keep the knowledge base."""
         if self.env != "production":      # in production Reset clears the screen only; learned cases are real data
@@ -51,6 +53,9 @@ class ReviewService:
         with self.lock:
             self.runs[base] += 1
             inv["id"] = base if self.runs[base] == 1 else f"{base}-r{self.runs[base]}"
+            self.seq += 1; inv["seq"] = self.seq
+            self.seen.append({"invoice_no": inv["invoice_no"], "vendor": inv["vendor"], "amount": inv["amount"],
+                              "date": inv["date"], "case": case_base(inv["id"]), "seq": self.seq})
             row = {"case_id": inv["id"], "vendor": inv["vendor"], "invoice_no": inv["invoice_no"],
                    "amount": inv["amount"], "status": "running", "invoice": inv}
             self.history.insert(0, row)
@@ -136,7 +141,7 @@ class ReviewService:
                 with self.lock: self.runs[cid + "~chk"] += 1; tid = f"{cid}~chk{self.runs[cid + '~chk']}"
                 res = self.flow.invoke({"invoice": r["invoice"] | {"id": tid}}, {"configurable": {"thread_id": tid}})
                 v = self._view(tid)
-                ok = ("__interrupt__" not in res and v.get("final") == "approved"
+                ok = ("__interrupt__" not in res and v.get("final") in ("approved", "recoded")
                       and f"CASE-{learned_from}" in (v.get("citations") or []))
                 why = {"against": learned_from, "decision": v.get("decision"), "proposed": v.get("proposed"), "confidence": v.get("confidence"),
                        "cites_learned_case": f"CASE-{learned_from}" in (v.get("citations") or []), "guard_notes": v.get("guard_notes") or [],
@@ -212,4 +217,5 @@ class ReviewService:
         return {"runs": len(self.history), "auto": len(auto), "reviewed": len([h for h in done if h.get("reviewer")]),
                 "waiting": len(self.pending), "running": len([h for h in self.history if h["status"] in ("running", "finishing", "rechecking")]), "learned": len([h for h in self.history if h.get("learned")]),
                 "guard_overrides": len([h for h in self.history if h.get("guard_notes")]),
+                "guard_checked": len([h for h in self.history if h.get("decision")]),
                 "agent_mode": self.agent_mode, "build": (os.getenv("RENDER_GIT_COMMIT") or "local")[:7], "features": ["linked-approval", "linked-hold", "conflict-check"], "salesforce": self.sf.enabled, "human_only": sorted(n for n in self.vendors if n.lower() in human_only_vendors(self.vendors)), "store": self.store.name, "provider": self.provider, "kb": self.kb, "env": self.env}

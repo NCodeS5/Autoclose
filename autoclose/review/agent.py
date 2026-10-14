@@ -60,7 +60,7 @@ def investigate(store, inv, ck, vendors, llm, max_steps=None):
         if name == "search_policies": return hits(DOCS, q, 3, {"doc_type": "policy"}, "agent: " + q[:40])
         if name == "search_contract": return hits(DOCS, q, 4, {"doc_type": "contract", "vendor": inv["vendor"]}, "agent: " + q[:40])
         if name == "search_past_cases": return hits(CASES, q, 3, {"vendor": inv["vendor"]}, "")
-        if name == "compare_to_purchase_order": return comparison_note(ck, passages, cases)
+        if name == "compare_to_purchase_order": return comparison_note(ck, passages, cases, inv)
         return f"unknown tool {name}"
     bound = llm.bind_tools(TOOLS)
     msgs = [SystemMessage(AGENT_SYSTEM), HumanMessage("INVOICE:\n" + json.dumps(inv))]

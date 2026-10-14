@@ -183,7 +183,7 @@ def test_approval_resolves_related_case_for_non_usage_vendor(monkeypatch):
     from autoclose.review.service import ReviewService
     monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
     s = ReviewService(llm=None)
-    a = s.run("C13"); b = s.run(invoice=_clone(s, "C13", "C13b", invoice_no="SF-9999", description="Lane 4 freight, week 13"))
+    a = s.run("C13"); b = s.run(invoice=_clone(s, "C13", "C13b", invoice_no="SF-9999", date="2026-04-20", description="Lane 4 freight, week 13"))
     assert a["status"] == "needs_review" and b["status"] == "needs_review"
     s.decide("C13", "benign", "ok")
     row = next(h for h in s.history if h["case_id"] == "C13b")
@@ -194,7 +194,7 @@ def test_rejection_holds_similar_waiting_case_and_never_approves(monkeypatch):
     from autoclose.review.service import ReviewService
     monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
     s = ReviewService(llm=None)
-    s.run("C13"); s.run(invoice=_clone(s, "C13", "C13b", invoice_no="SF-9999", description="Lane 4 freight, week 13"))
+    s.run("C13"); s.run(invoice=_clone(s, "C13", "C13b", invoice_no="SF-9999", date="2026-04-20", description="Lane 4 freight, week 13"))
     s.run("C19")                                       # unrelated waiting case must stay waiting
     s.decide("C13", "issue", "no")
     rows = {h["case_id"]: h for h in s.history}
@@ -228,7 +228,7 @@ def test_rejection_does_not_hold_when_history_conflicts(monkeypatch):
     from autoclose.rag import Chunk, CASES
     monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
     s = ReviewService(llm=None)
-    s.run("C13"); s.run(invoice=_clone(s, "C13", "C13b", invoice_no="SF-9999", description="Lane 4 freight, week 13"))
+    s.run("C13"); s.run(invoice=_clone(s, "C13", "C13b", invoice_no="SF-9999", date="2026-04-20", description="Lane 4 freight, week 13"))
     s.store.upsert(CASES, [Chunk("CASE-EARLIER", "SwiftFreight Logistics Freight Lane 4 freight, week 11 approved by reviewer after variance of 11 percent",
                                  {"vendor": "SwiftFreight Logistics", "outcome": "approved", "title": "EARLIER"})])
     s.decide("C13", "issue", "no")
@@ -280,3 +280,59 @@ def test_linked_sweeps_never_touch_human_only_vendor(monkeypatch):
     s2 = ReviewService(llm=None); s2.run("C22"); s2.run("C23")
     s2.decide("C22", "issue", "no")                       # would normally hold C23
     assert next(h for h in s2.history if h["case_id"] == "C23")["status"] == "needs_review"
+
+
+def _demo_svc(monkeypatch):
+    from autoclose.review.service import ReviewService
+    monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
+    return ReviewService(llm=None)
+
+
+def test_second_copy_of_an_invoice_is_voided_and_first_is_kept(monkeypatch):
+    s = _demo_svc(monkeypatch)
+    a, b = s.run("C29"), s.run("C30")
+    assert a["final"] == "approved" and not a["checks"]["duplicate_of"]
+    assert b["final"] == "voided" and b["checks"]["duplicate_of"] == "OC-3040" and b["action"]["action"] == "void"
+    assert b["status"] == "completed"           # no person needed
+    s.reset()
+    assert s.run("C29")["final"] == "approved"   # Reset forgets what was received
+
+
+def test_rerunning_the_same_case_is_not_a_duplicate_of_itself(monkeypatch):
+    s = _demo_svc(monkeypatch)
+    assert s.run("C29")["final"] == "approved" and s.run("C29")["final"] == "approved"
+
+
+def test_recode_waits_for_a_person_and_accepting_it_teaches_the_agent(monkeypatch):
+    s = _demo_svc(monkeypatch)
+    r = s.run("C10")
+    assert r["status"] == "needs_review" and r["decision"] == "recode" and r["proposed"] == "recode"
+    assert r["edge"] is None and any("accept the new category" in n for n in r["guard_notes"])
+    done = s.decide("C10", "benign", "yes")
+    assert done["final"] == "recoded" and done["action"]["to"] == "Freight" and done["learned"] and done["learned_id"] == "CASE-C10"
+    nxt = s.run("C31")                          # same vendor, same wrong category: now handled by the agent, citing the accepted recode
+    assert nxt["status"] == "completed" and nxt["final"] == "recoded" and "CASE-C10" in nxt["citations"]
+    assert not nxt["guard_notes"]
+
+
+def test_accepted_recode_resolves_a_similar_waiting_recode(monkeypatch):
+    s = _demo_svc(monkeypatch)
+    a, b = s.run("C10"), s.run("C31")
+    assert a["status"] == b["status"] == "needs_review"
+    s.decide("C10", "benign", "yes")
+    rows = {h["case_id"]: h for h in s.history}
+    assert rows["C31"]["status"] == "completed" and rows["C31"]["final"] == "recoded" and rows["C31"]["linked_to"] == "C10"
+
+
+def test_rejected_recode_is_held_and_teaches_nothing(monkeypatch):
+    s = _demo_svc(monkeypatch)
+    s.run("C10"); done = s.decide("C10", "issue", "no")
+    assert done["final"] == "held" and not done.get("learned")
+    assert s.run("C31")["status"] == "needs_review"
+
+
+def test_recode_memory_does_not_influence_price_variance_judgments(monkeypatch):
+    s = _demo_svc(monkeypatch)
+    s.run("C10"); s.decide("C10", "benign", "yes")
+    c13 = s.run("C13")                           # SwiftFreight +10.3% over PO must still go to a person
+    assert c13["status"] == "needs_review" and c13["edge"] == "E2"

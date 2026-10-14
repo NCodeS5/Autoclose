@@ -50,15 +50,15 @@ intake -> checks (code) -> retrieve (Pinecone/local) -> reason (LLM or offline) 
 - **audit trail**: every step is written to SQL (`DATABASE_URL`; in-memory SQLite by default, PostgreSQL when set).
 - Agent actions are proposals (void, recode). Source data is never changed.
 
-## Results (28 hand-written cases, local store, offline reasoner)
-Run `python run_rag_eval.py`. Last run: 16 of 28 handled by the agent alone, 12 escalated; escalation precision and recall 100%; expected clause retrieved for every case; 0 errors among auto-handled invoices; C23 is handled alone only after C22 was reviewed (it escalates without that history).
+## Results (31 hand-written cases, local store, offline reasoner)
+Run `python run_rag_eval.py`. Last run: 19 of 31 handled by the agent alone, 12 escalated; escalation precision and recall 100%; expected clause retrieved for every case; 0 errors among auto-handled invoices; C23 is handled alone only after C22 was reviewed (it escalates without that history).
 Read these honestly: the cases and the rules were written by the same person, so this is a regression test of the pipeline, not independent accuracy. The time comparison uses stated assumptions (5 min per invoice by hand, 3 min per review).
 
 ## Limitations
 - Offline reasoner is rules over retrieved text; real model behavior is untested until you add a key.
 - One worker: paused cases live in process memory (MemorySaver). A PostgreSQL checkpointer is the next step.
 - Docker image, Kubernetes manifests and the GitHub Actions workflow are written but were not run in the build environment.
-- Only 28 cases and 6 vendors. No OCR or PDF parsing; invoices arrive as structured fields.
+- Only 31 cases and 6 vendors. No OCR or PDF parsing; invoices arrive as structured fields.
 
 ## Files
 `data/kb/` policy manual and contracts, `data/cases.json` test invoices with expected answers, `autoclose/rag/` chunking, stores, ingest, `autoclose/review/` checks, retrieve, reasoner, guard, flow, audit, service, API, `autoclose/static/review.html` dashboard, `run_rag_eval.py`.

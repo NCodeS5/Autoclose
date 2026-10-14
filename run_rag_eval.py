@@ -1,4 +1,4 @@
-"""Evaluate the invoice review agent on the 28 hand-written cases (data/cases.json).
+"""Evaluate the invoice review agent on the 31 hand-written cases (data/cases.json).
 
 python run_rag_eval.py [--min-accuracy 0.95 --min-recall 1.0 --max-auto-error 0.0 --min-retrieval 0.95]
 Reviewer is simulated from each case's 'reviewer' field. Time figures use stated ASSUMPTIONS, not measurements."""

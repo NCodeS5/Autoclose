@@ -196,7 +196,7 @@
   "id": "C11",
   "invoice_no": "DP-0303",
   "vendor": "DataPulse Software",
-  "date": "2026-03-20",
+  "date": "2026-03-22",
   "amount": 2400.0,
   "po_amount": 2400.0,
   "category": "Professional Services",
@@ -531,6 +531,64 @@
    "edge": null,
    "cites": [
     "P-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C29",
+  "invoice_no": "OC-3040",
+  "vendor": "OfficeCo Supplies",
+  "date": "2026-04-14",
+  "amount": 780.0,
+  "po_amount": 780.0,
+  "category": "Office Supplies",
+  "description": "Printer paper and toner, April order",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "approve",
+   "edge": null,
+   "cites": [
+    "P-1"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C30",
+  "invoice_no": "OC-3040",
+  "vendor": "OfficeCo Supplies",
+  "date": "2026-04-14",
+  "amount": 780.0,
+  "po_amount": 780.0,
+  "category": "Office Supplies",
+  "description": "Printer paper and toner, April order",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "void_duplicate",
+   "edge": null,
+   "cites": [
+    "P-4"
+   ],
+   "reviewer": null
+  }
+ },
+ {
+  "id": "C31",
+  "invoice_no": "SF-7745",
+  "vendor": "SwiftFreight Logistics",
+  "date": "2026-04-16",
+  "amount": 2950.0,
+  "po_amount": 2950.0,
+  "category": "Office Supplies",
+  "description": "Lane 3 freight, week 14",
+  "doc_type": "invoice",
+  "expected": {
+   "decision": "recode",
+   "edge": null,
+   "cites": [
+    "P-5",
+    "CASE-C10"
    ],
    "reviewer": null
   }

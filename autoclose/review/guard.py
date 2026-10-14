@@ -1,6 +1,7 @@
 """Guard: checks the reasoner's decision before anyone acts on it. Hard rules live here, in code,
 so no model output can approve a write-off, an unknown vendor, a duplicate or a $25,000+ invoice."""
 import os, re
+from .checks import learned_recode
 
 MIN_CONFIDENCE = 0.75
 MATERIALITY = 25000.0
@@ -76,6 +77,14 @@ def guard(d, inv, ck, passages, cases) -> dict:
             g.update(decision="escalate", edge="E2", safety_net=True); notes.append(f"safety net: numbers not in evidence {sorted(unknown)}")
     if g["decision"] != "escalate" and g.get("confidence", 0) < MIN_CONFIDENCE:
         g.update(decision="escalate", edge="E2"); notes.append(f'confidence {g.get("confidence")} below {MIN_CONFIDENCE}')
+    # a recode changes the books, so a person accepts the new category, unless a person already approved this same recode
+    g["category_check"] = False
+    if g["decision"] == "recode":
+        lc = learned_recode(cases, inv, ck, g.get("citations", []))
+        if lc: g["learned_recode"] = lc["id"]
+        else:
+            g["category_check"] = True; g["edge"] = None
+            notes.append("recodes need a person to accept the new category until a similar recode has been approved")
     if g["decision"] == "escalate" and not g.get("edge"):
         g["edge"] = "E2"
     g["guard_notes"] = notes
