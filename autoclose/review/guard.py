@@ -42,6 +42,8 @@ def guard(d, inv, ck, passages, cases) -> dict:
         g.update(decision="escalate", edge=forced); notes.append(f"hard rule forced escalation ({forced})")
     elif forced and g.get("edge") != forced:
         g["edge"] = forced; notes.append(f"hard rule set the edge case to {forced}")
+    if ck.get("human_only") and g["decision"] != "escalate":
+        g.update(decision="escalate", edge="E1"); notes.append("hard rule: this vendor is human-only, so only a person can approve or reject its invoices")
     if ck["duplicate_of"] and g["decision"] == "approve":
         g.update(decision="void_duplicate", edge=None); notes.append("hard rule: duplicate cannot be approved")
     # cross-check against the rules: a model may be MORE cautious than the rules, never less

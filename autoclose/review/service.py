@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 from langgraph.types import Command
 from ..rag import get_store, ingest, CASES
-from .checks import load_vendors, load_prior, DATA
+from .checks import load_vendors, load_prior, human_only_vendors, DATA
 from .audit import AuditLog
 from .flow import build_flow
 from .reasoner import get_llm, CASE_MATCH_MIN
@@ -128,7 +128,7 @@ class ReviewService:
         """After a person approves a case that was learned, re-check the other waiting cases against the new memory.
         A waiting case is auto-resolved only if a fresh review approves it AND cites the newly learned case."""
         with self.lock:
-            others = [r for c, r in self.pending.items() if c != learned_from]
+            others = [r for c, r in self.pending.items() if c != learned_from and not (r.get("checks") or {}).get("human_only")]
             for r in others: r["status"] = "rechecking"
         for r in others:
             cid = r["case_id"]; ok = False; why = None
@@ -171,7 +171,7 @@ class ReviewService:
         """After a person rejects an unexplained case, put similar waiting cases (same vendor, similar description) on hold.
         Hold only: nothing is ever approved this way. A case is held when the rejected case is its close match in memory."""
         with self.lock:
-            others = [r for c, r in self.pending.items() if c != learned_from and r.get("edge") == "E2"]
+            others = [r for c, r in self.pending.items() if c != learned_from and r.get("edge") == "E2" and not (r.get("checks") or {}).get("human_only")]
             for r in others: r["status"] = "rechecking"
         for r in others:
             cid, inv = r["case_id"], r["invoice"]; match = None; notes = r.get("memory_notes"); conflict = None
@@ -212,4 +212,4 @@ class ReviewService:
         return {"runs": len(self.history), "auto": len(auto), "reviewed": len([h for h in done if h.get("reviewer")]),
                 "waiting": len(self.pending), "running": len([h for h in self.history if h["status"] in ("running", "finishing", "rechecking")]), "learned": len([h for h in self.history if h.get("learned")]),
                 "guard_overrides": len([h for h in self.history if h.get("guard_notes")]),
-                "agent_mode": self.agent_mode, "build": (os.getenv("RENDER_GIT_COMMIT") or "local")[:7], "features": ["linked-approval", "linked-hold", "conflict-check"], "salesforce": self.sf.enabled, "store": self.store.name, "provider": self.provider, "kb": self.kb, "env": self.env}
+                "agent_mode": self.agent_mode, "build": (os.getenv("RENDER_GIT_COMMIT") or "local")[:7], "features": ["linked-approval", "linked-hold", "conflict-check"], "salesforce": self.sf.enabled, "human_only": sorted(n for n in self.vendors if n.lower() in human_only_vendors(self.vendors)), "store": self.store.name, "provider": self.provider, "kb": self.kb, "env": self.env}

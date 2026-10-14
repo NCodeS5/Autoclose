@@ -38,3 +38,5 @@ services:
         sync: false
       - key: SF_CUSTOM_FIELDS
         sync: false
+      - key: HUMAN_ONLY_VENDORS
+        sync: false

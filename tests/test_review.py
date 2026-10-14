@@ -246,3 +246,37 @@ def test_linked_approval_does_not_depend_on_the_store_count(monkeypatch):
     s.decide("C22", "benign", "ok")
     row = next(h for h in s.history if h["case_id"] == "C23")
     assert row["status"] == "completed" and row["linked_to"] == "C22"
+
+
+def test_guard_forces_a_person_for_human_only_vendor():
+    from autoclose.review.guard import guard
+    ck = {"doc_type": "invoice", "known_vendor": True, "total": 3000, "duplicate_of": None, "variance_pct": 0.0, "ytd_billed": 1.0, "human_only": True}
+    d = {"decision": "approve", "edge": None, "confidence": 0.95, "citations": ["P-1"], "rationale": "Matches the purchase order."}
+    g = guard(d, {"amount": 3000}, ck, [{"id": "P-1", "text": "x"}], [])
+    assert g["decision"] == "escalate" and g["edge"] == "E1" and any("human-only" in n for n in g["guard_notes"])
+    ck["human_only"] = False
+    assert guard(d, {"amount": 3000}, ck, [{"id": "P-1", "text": "x"}], [])["decision"] == "approve"
+
+
+def test_human_only_vendor_is_sent_to_a_person_even_when_clean(monkeypatch):
+    from autoclose.review.service import ReviewService
+    monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
+    monkeypatch.delenv("HUMAN_ONLY_VENDORS", raising=False)
+    assert ReviewService(llm=None).run("C07")["status"] == "completed"       # Brightwell is normally automatic
+    monkeypatch.setenv("HUMAN_ONLY_VENDORS", "brightwell consulting")
+    s = ReviewService(llm=None); row = s.run("C07")
+    assert row["status"] == "needs_review" and row["edge"] == "E1" and row["checks"]["human_only"] is True
+    assert s.metrics()["human_only"] == ["Brightwell Consulting"]
+
+
+def test_linked_sweeps_never_touch_human_only_vendor(monkeypatch):
+    from autoclose.review.service import ReviewService
+    monkeypatch.setenv("AUTOCLOSE_ENV", "demo")
+    monkeypatch.setenv("HUMAN_ONLY_VENDORS", "CloudNimbus")
+    s = ReviewService(llm=None)
+    s.run("C22"); s.run("C23")
+    s.decide("C22", "benign", "ok")                       # would normally resolve C23
+    assert next(h for h in s.history if h["case_id"] == "C23")["status"] == "needs_review"
+    s2 = ReviewService(llm=None); s2.run("C22"); s2.run("C23")
+    s2.decide("C22", "issue", "no")                       # would normally hold C23
+    assert next(h for h in s2.history if h["case_id"] == "C23")["status"] == "needs_review"

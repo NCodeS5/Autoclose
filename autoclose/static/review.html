@@ -55,6 +55,17 @@ input[type=text]{border-radius:10px;padding:9px 12px}input[type=text]:focus{outl
 a{text-decoration:none}a:hover .pill{filter:brightness(.95);text-decoration:underline}
 .scroll::-webkit-scrollbar{width:8px}.scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
 #status{margin-bottom:6px}
+
+/* collapsible review cards */
+details.case.q{padding:0;overflow:hidden}
+details.case.q>summary{list-style:none;cursor:pointer;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;user-select:none}
+details.case.q>summary::-webkit-details-marker{display:none}
+details.case.q>summary:hover{background:var(--accbg)}
+details.case.q[open]>summary{border-bottom:1px solid var(--line)}
+.chev{width:8px;height:8px;border-right:2px solid var(--mut);border-bottom:2px solid var(--mut);transform:rotate(-45deg);transition:transform .15s;flex:none;margin-right:2px}
+details[open]>summary .chev{transform:rotate(45deg)}
+.sumtxt{color:var(--mut);font-size:13.5px}.sumconf{margin-left:auto;color:var(--mut);font-size:12.5px}
+.qbody{padding:4px 16px 16px}
 </style></head><body><div class="wrap">
 <h1>AutoClose · Invoice Review</h1>
 <p class="sub">An agent checks each invoice against company policy and the vendor contract, cites the clauses it used, and stops to ask a person only for edge cases. All data is invented.</p>
@@ -65,7 +76,7 @@ a{text-decoration:none}a:hover .pill{filter:brightness(.95);text-decoration:unde
 <div class="row"><button class="btn" onclick="runAll()">Run all</button><button class="btn ghost" onclick="resetAll()">Reset</button></div></div>
 <div class="scroll" style="margin-top:10px"><table id="cases"></table></div></div>
 
-<div class="card"><h2>2. Needs your review <span id="qcount" class="pill p-warn">0</span></h2>
+<div class="card"><div class="row sp"><h2>2. Needs your review <span id="qcount" class="pill p-warn">0</span></h2><span class="row"><button class="btn sm ghost" onclick="openAll(true)">Expand all</button><button class="btn sm ghost" onclick="openAll(false)">Collapse all</button></span></div>
 <p class="hint">The agent paused here. Blue-highlighted passages are the ones it cited.</p><div id="queue"></div></div>
 
 <div class="card"><h2>3. Results</h2><p class="hint">Click a row to see the evidence and the audit trail.</p><div class="scroll" style="max-height:520px"><table id="hist"></table></div><div id="detail"></div></div>
@@ -101,14 +112,16 @@ async function refresh(){
   CASES=cs;
   const busy=m.running>0; document.querySelectorAll("button").forEach(b=>{if(b.dataset.keep!=="1")b.disabled=false});
   clearTimeout(timer); if(busy)timer=setTimeout(()=>refresh().catch(()=>{}),800);
-  $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut","Build: "+m.build+(m.features&&m.features.includes("conflict-check")?" · latest":""))+(m.salesforce?pill("acc","Salesforce: connected"):"")+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
+  $("status").innerHTML=pill("acc","Vector store: "+m.store)+pill("acc","Model: "+m.provider)+pill(m.agent_mode==="agentic"?"warn":"mut",m.agent_mode==="agentic"?"Agent: free-flowing":"Agent: fixed workflow")+pill(m.env==="production"?"warn":"mut","Mode: "+m.env)+pill("mut","Build: "+m.build+(m.features&&m.features.includes("conflict-check")?" · latest":""))+(m.salesforce?pill("acc","Salesforce: connected"):"")+(m.human_only&&m.human_only.length?pill("warn","Human-only: "+m.human_only.join(", ")):"")+pill("mut",m.kb.docs+" policy/contract passages")+pill("mut",m.kb.cases+" seed cases");
   const t=[["Invoices run",m.runs+(m.running?" ("+m.running+" running)":"")],["Handled by agent",m.auto],["Reviewed by person",m.reviewed],["Waiting now",m.waiting],["Guard stepped in",m.guard_overrides],["Learned from reviews",m.learned]];
   $("tiles").innerHTML=t.map(x=>'<div class="tile"><b>'+x[1]+'</b><span>'+x[0]+'</span></div>').join("");
   const ran=new Set(h.map(x=>x.case_id.replace(/-r\d+$/,"")));
   $("cases").innerHTML='<tr><th>ID</th><th>Vendor</th><th>Description</th><th>Amount</th><th></th></tr>'+cs.map(c=>
     '<tr><td>'+c.id+'</td><td>'+esc(c.vendor)+'</td><td>'+esc(c.description)+'</td><td>'+money(c.amount)+'</td><td><button class="btn sm '+(ran.has(c.id)?'ghost':'')+'" onclick="runOne(\''+c.id+'\')">'+(ran.has(c.id)?'Run again':'Run')+'</button></td></tr>').join("");
   $("qcount").textContent=q.length;
+  const typed={};document.querySelectorAll("#queue input[type=text]").forEach(x=>{if(x.value)typed[x.id]=x.value});
   $("queue").innerHTML=q.length?q.map(card).join(""):'<div class="empty">Nothing waiting. Run an invoice above, for example C16 (credit memo) or C19 (unknown vendor).</div>';
+  Object.keys(typed).forEach(k=>{const x=$(k);if(x)x.value=typed[k]});
   $("hist").innerHTML=h.length?'<tr><th>Case</th><th>Vendor</th><th>Amount</th><th>Agent decision</th><th>Edge case</th><th>Outcome</th><th>Cited</th></tr>'+h.map(x=>
     '<tr class="click" onclick="detail(\''+x.case_id+'\')"><td>'+x.case_id+'</td><td>'+esc(x.vendor)+'</td><td>'+money(x.amount)+'</td><td>'+esc(x.proposed||x.decision)+(x.guard_notes&&x.guard_notes.length?' '+pill("bad","guard"):'')+'</td><td>'+(x.edge?pill("warn",EDGE[x.edge]||x.edge):"")+'</td><td>'+outcome(x)+'</td><td>'+cites(x)+'</td></tr>').join(""):'<tr><td class="empty">No results yet.</td></tr>';
 }
@@ -119,14 +132,19 @@ function evidence(h){
   return ps.map(p=>'<div class="pas '+(cited.has(p.id)?'cited':'')+'"><span class="id">'+esc(p.id)+'</span> '+esc(p.text)+'</div>').join("")||'<div class="empty">Nothing retrieved.</div>';}
 function facts(h){const i=h.invoice,c=h.checks||{};
   return '<div><b>'+esc(i.vendor)+'</b> · '+esc(i.invoice_no)+' · '+money(i.amount)+(i.po_amount!=null?' vs PO '+money(i.po_amount):' (no PO)')+'</div><div class="hint">'+esc(i.description)+'</div>'+
-  '<div class="row" style="margin-top:4px">'+(c.variance_pct!=null?pill("mut","variance "+c.variance_pct+"%"):"")+(c.duplicate_of?pill("bad","duplicate of "+c.duplicate_of):"")+(!c.known_vendor?pill("bad","unknown vendor"):"")+(c.category_mismatch?pill("warn","category mismatch"):"")+(c.late_fee?pill("warn","late fee"):"")+(c.ytd_billed!=null?pill("mut","billed this year "+money(c.ytd_billed)):"")+'</div>';}
+  '<div class="row" style="margin-top:4px">'+(c.variance_pct!=null?pill("mut","variance "+c.variance_pct+"%"):"")+(c.duplicate_of?pill("bad","duplicate of "+c.duplicate_of):"")+(!c.known_vendor?pill("bad","unknown vendor"):"")+(c.category_mismatch?pill("warn","category mismatch"):"")+(c.late_fee?pill("warn","late fee"):"")+(c.human_only?pill("warn","human-only vendor"):"")+(c.ytd_billed!=null?pill("mut","billed this year "+money(c.ytd_billed)):"")+'</div>';}
 function card(h){
   const g=(h.guard_notes||[]).map(n=>'<div class="hint" style="color:var(--bad)">Guard: '+esc(n)+'</div>').join("");
-  return '<div class="case"><div class="row">'+pill("warn",EDGE[h.edge]||"Audit sample")+' <b>'+h.case_id+'</b>'+sfl(h)+'</div><div style="margin:8px 0">'+facts(h)+mem(h)+'</div>'+
+  const i=h.invoice,flags=(h.memory_notes||[]).some(n=>n.outcome==="rejected")?pill("bad","similar case rejected"):((h.memory_notes||[]).some(n=>n.outcome==="approved")?pill("ok","similar case approved"):"");
+  const head='<summary><span class="chev"></span>'+pill("warn",EDGE[h.edge]||"Audit sample")+'<b>'+h.case_id+'</b><span class="sumtxt">'+esc(i.vendor)+' · '+money(i.amount)+'</span>'+flags+(h.guard_notes&&h.guard_notes.length?pill("bad","guard"):"")+sfl(h).replace("<a ",'<a onclick="event.stopPropagation()" ')+'<span class="sumconf">conf '+(h.confidence!=null?h.confidence:"–")+'</span></summary>';
+  return '<details class="case q"'+(OPEN.has(h.case_id)?' open':'')+' ontoggle="tg(\''+h.case_id+'\',this)">'+head+'<div class="qbody"><div style="margin:8px 0">'+facts(h)+mem(h)+'</div>'+
   '<div class="grid2"><div class="box"><h3>Agent says</h3><div>'+esc(h.rationale||"No rationale. The guard stopped this.")+'</div><div class="hint" style="margin-top:6px">Confidence '+(h.confidence!=null?h.confidence:"–")+' · Cites '+cites(h)+'</div>'+g+recheck(h)+'</div>'+
   '<div class="box"><h3>Evidence retrieved</h3><div class="scroll" style="max-height:200px">'+evidence(h)+'</div></div></div>'+
   '<div class="row" style="margin-top:10px"><input type="text" id="n-'+h.case_id+'" placeholder="Optional note">'+
-  '<button class="btn go" onclick="decide(\''+h.case_id+'\',\'benign\')">Approve</button><button class="btn stop" onclick="decide(\''+h.case_id+'\',\'issue\')">Reject</button></div></div>';}
+  '<button class="btn go" onclick="decide(\''+h.case_id+'\',\'benign\')">Approve</button><button class="btn stop" onclick="decide(\''+h.case_id+'\',\'issue\')">Reject</button></div></div></details>';}
+const OPEN=new Set();
+function tg(id,el){if(el.open)OPEN.add(id);else OPEN.delete(id)}
+function openAll(on){document.querySelectorAll("#queue details").forEach(d=>{d.open=on})}
 async function detail(id){
   const [h,a]=await Promise.all([api("/review/history"),api("/review/audit/"+id)]);
   const x=h.find(r=>r.case_id===id); if(!x)return;
